@@ -18,4 +18,8 @@ class Post extends Model
     public function items(){
         return $this->hasMany(WpOrderItem::class,'order_id','ID');
     }
+
+    public function comments(){
+        return $this->hasMany(Comment::class,'comment_post_ID','ID');
+    }
 }

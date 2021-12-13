@@ -8,4 +8,6 @@ use Illuminate\Database\Eloquent\Model;
 class CommentMeta extends Model
 {
     use HasFactory;
+
+    protected $table = "wp_commentmeta";
 }

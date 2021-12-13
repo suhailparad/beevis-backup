@@ -76,6 +76,8 @@ class MigrationController extends Controller
             ->with('meta')
             ->with(['items'=>function($q){
                 $q->with('meta');
+            }])->with(['comments'=>function($q){
+                $q->with('meta');
             }])->get();
 
         $orders_array = [];
@@ -175,7 +177,32 @@ class MigrationController extends Controller
             $array['addons'] = $addons;
             $array['transactions'] = $order_transaction;
 
-            // $array['order_taxes'] = $this->getOrderTaxes($order->items->where('order_item_type','tax'));
+            $history = [];
+            foreach($order->comments as $comment){
+                $type='note';
+                $platform="";
+                foreach($comment->meta as $meta){
+                    if($meta->meta_key=="order_note_type" && $meta->meta_value=="communication"){
+                        $type='communication';
+                    }else if($meta->meta_key=="order_note_type" && $meta->meta_value=="history"){
+                        $type='history';
+                    }
+                    if($meta->meta_key=="order_communication_platform"){
+                        $platform= $meta->meta_value;
+                    }
+                }
+                $order_comment = [
+                    'order_id' => $order->ID,
+                    'type' => $type,
+                    'note' => $comment->comment_content,
+                    'date' => $comment->comment_date,
+                    'user_id' => 1,
+                    'platfotm' => $platform
+                ];
+                array_push($history,$order_comment);
+            }
+
+            $array['comments'] = $history;
 
             array_push($orders_array,$array);
         }
@@ -295,16 +322,6 @@ class MigrationController extends Controller
 
     }
 
-    // public function getOrderTaxes($tax){
-    //     $tax_array=[];
-    //     foreach($tax as $_tax){
-    //         $array=[];
-    //         foreach($_tax->meta as $meta){
-    //             switch()
-    //         }
-    //     }
-    // }
-
     public function migrateTaxRate(){
         foreach(WpWocommerceTaxRate::where('tax_rate_id','>',198)->get() as $wp_rates){
             $state_id = $this->getStateId($wp_rates->tax_rate_state);
@@ -335,7 +352,7 @@ class MigrationController extends Controller
     }
 
     public function getProductId($variation_id){
-        
+
         $product = Product::where('variation_id',$variation_id)->first();
         if($product)
             return $product->id;
@@ -350,6 +367,9 @@ class MigrationController extends Controller
         try{
             foreach($prepared_order as $wp_order){
                 $order = Order::create($wp_order);
+
+                $order->orderHistory()->createMany($wp_order['comments']);
+
                 $sub_total = 0;
                 $addon_total = 0;
                 foreach($wp_order['products'] as $item){
@@ -359,7 +379,7 @@ class MigrationController extends Controller
                         $item['product_id'] = $item['parent_id'];
 
                     $_item = $order->products()->create($item);
-                  
+
                     $unserialized = unserialize($item['tax_data'])['total'];
                     foreach(array_keys($unserialized) as $tax_rates){
                         $tax = TaxRate::where('tax_rate_id',$tax_rates)->first();
@@ -380,7 +400,6 @@ class MigrationController extends Controller
                     $addon_total+=$item['total'];
                     $_addon_item = $order->addons()->create($item);
                     $unserialized = unserialize($item['tax_data'])['total'];
-                    \Log::info($item);
                     foreach(array_keys($unserialized) as $tax_rates){
                         $tax = TaxRate::where('tax_rate_id',$tax_rates)->first();
                         if(!$tax){
@@ -393,7 +412,7 @@ class MigrationController extends Controller
                             $tax_rate_id = $tax->id;
                             $tax_rate = $tax->rate;
                         }
-                       
+
                         $amount = $unserialized[$tax_rates];
 
                         OrderTax::create([
@@ -418,7 +437,7 @@ class MigrationController extends Controller
                         //\Log::info($wp_order['id']);
                         $shipment_array = [
                             'order_id' => $wp_order['id'],
-                           
+
                             'status' => match($wp_order['order_admin_status']){
                                     'ready' => 'Created',
                                     'invoiced' => 'Created',
