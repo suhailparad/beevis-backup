@@ -3,12 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Order;
+use App\Models\OrderInvoice;
 use App\Models\OrderTax;
 use App\Models\Post;
 use App\Models\PostMeta;
 use App\Models\Product;
 use App\Models\State;
 use App\Models\TaxRate;
+use App\Models\WpCourierTracking;
 use App\Models\WpWocommerceTaxRate;
 use Exception;
 use Illuminate\Http\Request;
@@ -105,6 +107,8 @@ class MigrationController extends Controller
                     case "_order_total":$array['grand_total']=$meta->meta_value;break;
                     case "_billing_email" : $array['email'] = $meta->meta_value;break;
                     case "_billing_phone" : $array['phone'] = $meta->meta_value;break;
+                    case "_order_admin_status" : $array['order_admin_status'] = $meta->meta_value;break;
+                    case "_invoice_no" : $array['invoice_no'] = $meta->meta_value;break;
 
                     case "_billing_first_name" :$order_billing_array['first_name']=$meta->meta_value;break;
                     case "_billing_last_name" :$order_billing_array['last_name']=$meta->meta_value;break;
@@ -339,7 +343,10 @@ class MigrationController extends Controller
         try{
             foreach($prepared_order as $wp_order){
                 $order = Order::create($wp_order);
+                $sub_total = 0;
+                $addon_total = 0;
                 foreach($wp_order['products'] as $item){
+                    $sub_total+=$item['total'];
                     $_item = $order->products()->create($item);
                     $unserialized = unserialize($item['tax_data'])['total'];
                     foreach(array_keys($unserialized) as $tax_rates){
@@ -354,11 +361,87 @@ class MigrationController extends Controller
                             'rate'=>$tax_rate,
                             'tax_amount'=>$amount,
                         ]);
-
                     }
                 }
+
+                foreach($wp_order['addons'] as $item){
+                    $addon_total+=$item['total'];
+                    $_addon_item = $order->addons()->create($item);
+                    $unserialized = unserialize($item['tax_data'])['total'];
+                    foreach(array_keys($unserialized) as $tax_rates){
+                        $tax = TaxRate::where('tax_rate_id',$tax_rates)->first();
+                        $tax_rate_id = $tax->id;
+                        $tax_rate = $tax->rate;
+                        $amount = $unserialized[$tax_rates];
+
+                        OrderTax::create([
+                            'order_item_id'=>$_addon_item->id,
+                            'tax_rate_id'=>$tax_rate_id,
+                            'rate'=>$tax_rate,
+                            'tax_amount'=>$amount,
+                        ]);
+                    }
+                }
+
                 if($order->status != 'Unpaid' && $order->status != 'Cancelled'){
+                    //Transaction
                     $order->transactions()->create($wp_order['transactions']);
+
+                    $wp_courier_tracking = WpCourierTracking::where('order_id', $order->id)->first();
+
+                    if($wp_courier_tracking){
+                        $shipment_array = [
+                            'order_id' => $wp_order['id'],
+                            'status' => match($wp_order['order_admin_status']){
+                                    'Ready' => 'Created',
+                                    'Invoiced' => 'Created',
+                                    'Packed' => 'Packed',
+                                    'Shipped' => 'Shipped'
+                                },
+                            'warehouse_id' => 1,
+                            'courier_id' => $wp_courier_tracking->courier_id,
+                            'length' => $wp_courier_tracking->qd_pack_length,
+                            'breadth' => $wp_courier_tracking->qd_pack_breadth,
+                            'height' => $wp_courier_tracking->qd_pack_height,
+                            'weight' => $wp_courier_tracking->qd_pack_weight,
+                            'waybill_no' => $wp_courier_tracking->AWBNo,
+                            'shipment_type' => 'forward',
+                            'datetime' => $wp_courier_tracking->qd_pack_pick_up_date+" 16:00:00",
+                            'sub_total' => $sub_total,
+                            'addon_total' => $addon_total,
+                            'grand_total' => $order->grand_total
+                        ];
+
+                        $shipment = $order->shipments()->create($shipment_array);
+
+                        $invoice_master = OrderInvoice::create([
+                            'shipment_id' => $shipment->id,
+                            'order_id' => $order->id,
+                            'invoice_no' => $wp_order['invoice_no'],
+                            'invoice_date' => $shipment->date_time
+                        ]);
+
+                        $order_invoice = OrderInvoice::create($invoice_master);
+                        foreach($order->products as $product){
+                            $shipment_items =[
+                                'shipment_id' => $shipment->id,
+                                'product_id' => $product->product_id,
+                                'order_item_id' => $product->id,
+                                'quantity' => $product->quantity,
+                                'price' => $product->price,
+                                'total' => $product->total
+                            ];
+
+                            $invoice_items =[
+                                'order_invoice_id' => $order_invoice->id,
+                                'product_id' => $product->product_id,
+                                'quantity' => $product->quantity,
+                                'total_amount' => $product->total
+                            ];
+                            $shipment->items()->create($shipment_items);
+                            $order_invoice->items()->create($invoice_items);
+                        }
+                    }
                 }
             }
             DB::commit();
