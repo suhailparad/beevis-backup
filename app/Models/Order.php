@@ -99,7 +99,7 @@ class Order extends Model
 
     public function products()
     {
-        return $this->hasMany(OrderItem::class)->where('type', 'product')->with('product');
+        return $this->hasMany(OrderItem::class)->where('type', 'product');
     }
 
     public function productchannel(){

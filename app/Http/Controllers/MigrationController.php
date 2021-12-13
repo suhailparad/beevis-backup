@@ -70,8 +70,8 @@ class MigrationController extends Controller
     public function migrateOrder(){
 
         $orders = Post::where('post_type','shop_order')
-            ->whereDate('post_date','>=','2021-08-01')
-            ->whereDate('post_date','<=','2021-08-01')
+            ->whereDate('post_date','>=','2021-11-21')
+            ->whereDate('post_date','<=','2021-11-30')
             ->orderBy('post_date')
             ->with('meta')
             ->with(['items'=>function($q){
@@ -194,6 +194,7 @@ class MigrationController extends Controller
     }
 
     public function makeOrderItems($line_items,$order){
+       // \Log::info($order['id']);
         $items =[];
         foreach($line_items as $item){
             $item_array=[];
@@ -201,6 +202,7 @@ class MigrationController extends Controller
             foreach($item->meta as $meta){
                 switch($meta->meta_key){
                     case '_variation_id': $item_array['product_id']=$this->getProductId($meta->meta_value);break;
+                    case '_product_id': $item_array['parent_id']=$this->getProductId($meta->meta_value);break;
                     case '_line_tax' : $item_array['tax_amount']=$meta->meta_value;break;
                     case '_tax_class' : $item_array['tax_percentage']=$this->getTaxPercentage($meta->meta_value);break;
                     case '_line_total' : $item_array['taxable_amount']=$meta->meta_value;break;
@@ -231,6 +233,7 @@ class MigrationController extends Controller
                 switch($meta->meta_key){
                     case '_line_tax' : $item_array['tax_amount']=$meta->meta_value;break;
                     case '_line_total' : $item_array['taxable_amount']=$meta->meta_value;break;
+                    case '_line_tax_data' : $item_array['tax_data'] = $meta->meta_value;break;
                 }
             }
             $item_array['_product_id'] = 2;
@@ -332,13 +335,17 @@ class MigrationController extends Controller
     }
 
     public function getProductId($variation_id){
+        
         $product = Product::where('variation_id',$variation_id)->first();
-        return $product->id;
+        if($product)
+            return $product->id;
+        else
+            return null;
     }
 
     /* MIGRATE */
     public function migrateToDb($prepared_order){
-        return $prepared_order;
+       // return $prepared_order;
         DB::beginTransaction();
         try{
             foreach($prepared_order as $wp_order){
@@ -347,7 +354,12 @@ class MigrationController extends Controller
                 $addon_total = 0;
                 foreach($wp_order['products'] as $item){
                     $sub_total+=$item['total'];
+                   // \Log::info($item);
+                    if(!$item['product_id'])
+                        $item['product_id'] = $item['parent_id'];
+
                     $_item = $order->products()->create($item);
+                  
                     $unserialized = unserialize($item['tax_data'])['total'];
                     foreach(array_keys($unserialized) as $tax_rates){
                         $tax = TaxRate::where('tax_rate_id',$tax_rates)->first();
@@ -368,10 +380,20 @@ class MigrationController extends Controller
                     $addon_total+=$item['total'];
                     $_addon_item = $order->addons()->create($item);
                     $unserialized = unserialize($item['tax_data'])['total'];
+                    \Log::info($item);
                     foreach(array_keys($unserialized) as $tax_rates){
                         $tax = TaxRate::where('tax_rate_id',$tax_rates)->first();
-                        $tax_rate_id = $tax->id;
-                        $tax_rate = $tax->rate;
+                        if(!$tax){
+                            if($wp_order['status'] == 'Unpaid' || $wp_order['status'] == 'Cancelled'){
+                                $tax_rate_id = 57;
+                                $tax_rate = 12;
+                            }
+                        }
+                        else {
+                            $tax_rate_id = $tax->id;
+                            $tax_rate = $tax->rate;
+                        }
+                       
                         $amount = $unserialized[$tax_rates];
 
                         OrderTax::create([
@@ -385,18 +407,24 @@ class MigrationController extends Controller
 
                 if($order->status != 'Unpaid' && $order->status != 'Cancelled'){
                     //Transaction
+                   // \Log::info($wp_order['transactions']);
+                    if($wp_order['transactions']['payment_method_id'] == 1)
+                    $wp_order['transactions']['transaction_date'] = $order->date;
                     $order->transactions()->create($wp_order['transactions']);
 
                     $wp_courier_tracking = WpCourierTracking::where('order_id', $order->id)->first();
 
                     if($wp_courier_tracking){
+                        //\Log::info($wp_order['id']);
                         $shipment_array = [
                             'order_id' => $wp_order['id'],
+                           
                             'status' => match($wp_order['order_admin_status']){
-                                    'Ready' => 'Created',
-                                    'Invoiced' => 'Created',
-                                    'Packed' => 'Packed',
-                                    'Shipped' => 'Shipped'
+                                    'ready' => 'Created',
+                                    'invoiced' => 'Created',
+                                    'todespatch' => 'Packed',
+                                    'packed' => 'Packed',
+                                    'shipped' => 'Shipped'
                                 },
                             'warehouse_id' => 1,
                             'courier_id' => $wp_courier_tracking->courier_id,
@@ -406,7 +434,7 @@ class MigrationController extends Controller
                             'weight' => $wp_courier_tracking->qd_pack_weight,
                             'waybill_no' => $wp_courier_tracking->AWBNo,
                             'shipment_type' => 'forward',
-                            'datetime' => $wp_courier_tracking->qd_pack_pick_up_date+" 16:00:00",
+                            'date_time' => $wp_courier_tracking->qd_pack_pick_up_date." 16:00:00",
                             'sub_total' => $sub_total,
                             'addon_total' => $addon_total,
                             'grand_total' => $order->grand_total
@@ -414,14 +442,14 @@ class MigrationController extends Controller
 
                         $shipment = $order->shipments()->create($shipment_array);
 
-                        $invoice_master = OrderInvoice::create([
+                        $order_invoice = OrderInvoice::create([
                             'shipment_id' => $shipment->id,
                             'order_id' => $order->id,
                             'invoice_no' => $wp_order['invoice_no'],
                             'invoice_date' => $shipment->date_time
                         ]);
 
-                        $order_invoice = OrderInvoice::create($invoice_master);
+                       // $order_invoice = OrderInvoice::create($invoice_master);
                         foreach($order->products as $product){
                             $shipment_items =[
                                 'shipment_id' => $shipment->id,
@@ -448,7 +476,7 @@ class MigrationController extends Controller
             echo "done";
         }catch(Exception $ex){
             DB::rollBack();
-            return $ex->getMessage();
+            return $ex->getMessage().' '.$ex->getLine();
         }
     }
 
