@@ -10,8 +10,10 @@ use App\Models\PostMeta;
 use App\Models\Product;
 use App\Models\State;
 use App\Models\TaxRate;
+use App\Models\UserRole;
 use App\Models\WpCourierTracking;
 use App\Models\WpWocommerceTaxRate;
+use App\Models\User;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -70,8 +72,8 @@ class MigrationController extends Controller
     public function migrateOrder(){
 
         $orders = Post::where('post_type','shop_order')
-            ->whereDate('post_date','>=','2021-11-21')
-            ->whereDate('post_date','<=','2021-11-30')
+            ->whereDate('post_date','>=','2021-09-16')
+            ->whereDate('post_date','<=','2021-09-30')
             ->orderBy('post_date')
             ->with('meta')
             ->with(['items'=>function($q){
@@ -197,7 +199,7 @@ class MigrationController extends Controller
                     'note' => $comment->comment_content,
                     'date' => $comment->comment_date,
                     'user_id' => 1,
-                    'platfotm' => $platform
+                    'platform' => $platform
                 ];
                 array_push($history,$order_comment);
             }
@@ -369,6 +371,8 @@ class MigrationController extends Controller
                 $order = Order::create($wp_order);
 
                 $order->orderHistory()->createMany($wp_order['comments']);
+                $order->billingAddress()->create($wp_order['billing_address']);
+                $order->shippingAddress()->create($wp_order['shipping_address']);
 
                 $sub_total = 0;
                 $addon_total = 0;
@@ -490,6 +494,23 @@ class MigrationController extends Controller
                         }
                     }
                 }
+            }
+            DB::commit();
+            echo "done";
+        }catch(Exception $ex){
+            DB::rollBack();
+            return $ex->getMessage().' '.$ex->getLine();
+        }
+    }
+
+    public function migrateUserRoles(){
+        DB::beginTransaction();
+        try{
+            foreach (User::where('id','>',1)->get() as $user) {
+                UserRole::create([
+                    'user_id' => $user->id,
+                    'role_id' => 2
+                ]);
             }
             DB::commit();
             echo "done";

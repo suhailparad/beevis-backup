@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Modules\Order\Entities\OrderHistory;
 use Modules\Channel\Entities\Channel;
 use Modules\Customer\Entities\Customer;
 use Modules\OrderRma\Entities\RmaRequest;
