@@ -15,7 +15,7 @@ const form = useForm({
 });
 
 const submit = () => {
-    form.post(route('dashboard.migrate'), {
+    form.post(route('migrate.users'), {
         onFinish: () => {
 
         }
@@ -41,14 +41,6 @@ const submit = () => {
                         <h5 class="mb-5">Platoshop Migration Tool!</h5>
 
                         <div class="flex">
-                            <div>
-                                From :
-                                <BreezeInput id="email" type="date" class="inline-block " v-model="form.from_date" required  />
-                            </div>
-                            <div class="ml-4">
-                                To :
-                                <BreezeInput id="email" type="date" class="inline-block" v-model="form.to_date" required />
-                            </div>
                             <div>
                                 <BreezeButton @click="submit" class="ml-4 h-[40px]" :class="{ 'opacity-25': form.processing }" :disabled="form.processing">
                                     Start Migration
