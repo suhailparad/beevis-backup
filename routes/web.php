@@ -14,8 +14,8 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::get('/migrate/user', [MigrationController::class,'migrateUser']);
+//Route::get('/migrate/user', [MigrationController::class,'migrateUser']);
 Route::get('/migrate/order', [MigrationController::class,'migrateOrder']);
 
-Route::get('/migrate-tax-rates', [MigrationController::class,'migrateTaxRate']);
-Route::get('/migrate/user-roles', [MigrationController::class,'migrateUserRoles']);
+//Route::get('/migrate-tax-rates', [MigrationController::class,'migrateTaxRate']);
+//Route::get('/migrate/user-roles', [MigrationController::class,'migrateUserRoles']);

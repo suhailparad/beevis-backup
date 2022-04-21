@@ -72,8 +72,8 @@ class MigrationController extends Controller
     public function migrateOrder(){
 
         $orders = Post::where('post_type','shop_order')
-            ->whereDate('post_date','>=','2021-09-16')
-            ->whereDate('post_date','<=','2021-09-30')
+            ->whereDate('post_date','>=','2021-12-01')
+            ->whereDate('post_date','<=','2021-12-15')
             ->orderBy('post_date')
             ->with('meta')
             ->with(['items'=>function($q){
@@ -401,21 +401,22 @@ class MigrationController extends Controller
                 }
 
                 foreach($wp_order['addons'] as $item){
+                   
                     $addon_total+=$item['total'];
                     $_addon_item = $order->addons()->create($item);
                     $unserialized = unserialize($item['tax_data'])['total'];
                     foreach(array_keys($unserialized) as $tax_rates){
                         $tax = TaxRate::where('tax_rate_id',$tax_rates)->first();
-                        if(!$tax){
-                            if($wp_order['status'] == 'Unpaid' || $wp_order['status'] == 'Cancelled'){
-                                $tax_rate_id = 57;
-                                $tax_rate = 12;
-                            }
-                        }
-                        else {
+                        // if(!$tax){
+                            // if($wp_order['status'] == 'Unpaid' || $wp_order['status'] == 'Cancelled'){
+                            //     $tax_rate_id = 57;
+                            //     $tax_rate = 12;
+                            // }
+                       // }
+                        // else {
                             $tax_rate_id = $tax->id;
                             $tax_rate = $tax->rate;
-                        }
+                        //}
 
                         $amount = $unserialized[$tax_rates];
 
@@ -438,7 +439,7 @@ class MigrationController extends Controller
                     $wp_courier_tracking = WpCourierTracking::where('order_id', $order->id)->first();
 
                     if($wp_courier_tracking){
-                        //\Log::info($wp_order['id']);
+                        \Log::info($wp_order['id']);
                         $shipment_array = [
                             'order_id' => $wp_order['id'],
 
@@ -464,7 +465,17 @@ class MigrationController extends Controller
                         ];
 
                         $shipment = $order->shipments()->create($shipment_array);
-
+                        if(!isset($wp_order['invoice_no'])){
+                            if($wp_order['id'] == 29851){
+                                $wp_order['invoice_no'] = 7423;
+                            }
+                            else if($wp_order['id'] == 29853){
+                                $wp_order['invoice_no'] = 7422;
+                            }
+                            else if($wp_order['id'] == 29854){
+                                $wp_order['invoice_no'] = 7421;
+                            }
+                        }
                         $order_invoice = OrderInvoice::create([
                             'shipment_id' => $shipment->id,
                             'order_id' => $order->id,
