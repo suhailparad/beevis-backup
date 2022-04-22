@@ -5,22 +5,6 @@ import BreezeButton from '@/Components/Button.vue';
 import BreezeInput from '@/Components/Input.vue';
 import { onMounted } from 'vue';
 
-const props = defineProps({
-    flash: Object,
-});
-
-const form = useForm({
-    start_date: '',
-    end_date: ''
-});
-
-const submit = () => {
-    form.post(route('dashboard.migrate'), {
-        onFinish: () => {
-
-        }
-    });
-};
 
 </script>
 
@@ -39,27 +23,6 @@ const submit = () => {
                 <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                     <div class="p-6 bg-white border-b border-gray-200">
                         <h5 class="mb-5">Platoshop Migration Tool!</h5>
-
-                        <div class="flex">
-                            <div>
-                                From :
-                                <BreezeInput id="email" type="date" class="inline-block " v-model="form.from_date" required  />
-                            </div>
-                            <div class="ml-4">
-                                To :
-                                <BreezeInput id="email" type="date" class="inline-block" v-model="form.to_date" required />
-                            </div>
-                            <div>
-                                <BreezeButton @click="submit" class="ml-4 h-[40px]" :class="{ 'opacity-25': form.processing }" :disabled="form.processing">
-                                    Start Migration
-                                </BreezeButton>
-                            </div>
-                        </div>
-
-                        <span class="mt-8 text-gray-500 text-md block">Result</span>
-                        <div class="border border-gray-200 block mt-1 p-10 bg-slate-50 rounded">
-
-                        </div>
 
                     </div>
                 </div>

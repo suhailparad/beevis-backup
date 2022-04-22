@@ -60,10 +60,10 @@ const submit = () => {
                         <span class="mt-8 text-gray-500 text-md block">Result</span>
                         <div class="border border-gray-200 block mt-1 p-10 bg-slate-50 rounded">
                             <template v-if="flash.success">
-
+                                <span class="text-green-600">{{flash.success}}</span>
                             </template>
                             <template v-if="flash.error">
-
+                                <span class="text-red-600">{{flash.error}}</span>
                             </template>
                         </div>
 

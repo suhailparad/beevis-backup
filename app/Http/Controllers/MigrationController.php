@@ -239,7 +239,7 @@ class MigrationController extends Controller
                     case '_line_tax_data' : $item_array['tax_data'] = $meta->meta_value;break;
                 }
             }
-            $item_array['price'] = $item_array['tax_amount'] + $item_array['taxable_amount'];
+            $item_array['price'] = $item_array['tax_amount'] + $item_array['taxable_amount']; //devide by qty
             $item_array['total'] = $item_array['price'] * $item_array['quantity'];
             $item_array['type']  = 'product';
             $item_array['created_at'] = $order['created_at'];
@@ -268,7 +268,7 @@ class MigrationController extends Controller
             $item_array['_product_id'] = 2;
             $item_array['tax_percentage']=$this->getAddonTaxPercentage($order);
             $item_array['quantity']=1;
-            $item_array['price'] = $item_array['tax_amount'] + $item_array['taxable_amount'];
+            $item_array['price'] = $item_array['tax_amount'] + $item_array['taxable_amount']; //devide by qty
             $item_array['total'] = $item_array['price'] * $item_array['quantity'];
             $item_array['type']  = 'add_on_item';
             $item_array['created_at'] = $order['created_at'];
@@ -297,8 +297,9 @@ class MigrationController extends Controller
             }
         }
         if($kerala_state_id == $order['shipping_address']['state_id']){
+            //change in happenstance
             if($kfc_enabled){
-                $tax_percentage = 12;
+                $tax_percentage = 12; // change to 18
             }else{
                 $tax_percentage  =5;
             }

@@ -3,22 +3,21 @@ import BreezeAuthenticatedLayout from '@/Layouts/Authenticated.vue';
 import { Head,useForm } from '@inertiajs/inertia-vue3';
 import BreezeButton from '@/Components/Button.vue';
 import BreezeInput from '@/Components/Input.vue';
-import { ref,onMounted } from 'vue';
+import { onMounted } from 'vue';
 
 const props = defineProps({
     flash: Object,
 });
 
 const form = useForm({
-    // limit: 10000,
-    // offset: 10000,
+    start_date: '',
+    end_date: ''
 });
 
-
 const submit = () => {
-    form.post(route('migrate.wallets'), {
+    form.post(route('migrate.orders'), {
         onFinish: () => {
-            // form.offset+=form.limit;
+
         }
     });
 };
@@ -31,7 +30,7 @@ const submit = () => {
     <BreezeAuthenticatedLayout>
         <template #header>
             <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-                Wallets
+                Orders
             </h2>
         </template>
 
@@ -39,9 +38,17 @@ const submit = () => {
             <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
                 <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                     <div class="p-6 bg-white border-b border-gray-200">
-                        <h5 class="mb-5">Platoshop Migration Tool!</h5>
+                        <h5 class="mb-5">Order Migration Tool!</h5>
 
                         <div class="flex">
+                            <div>
+                                From :
+                                <BreezeInput id="email" type="date" class="inline-block " v-model="form.from_date" required  />
+                            </div>
+                            <div class="ml-4">
+                                To :
+                                <BreezeInput id="email" type="date" class="inline-block" v-model="form.to_date" required />
+                            </div>
                             <div>
                                 <BreezeButton @click="submit" class="ml-4 h-[40px]" :class="{ 'opacity-25': form.processing }" :disabled="form.processing">
                                     Start Migration
