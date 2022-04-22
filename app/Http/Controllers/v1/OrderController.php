@@ -181,8 +181,8 @@ class OrderController extends Controller
             $item_array['order_id'] = $item->order_id;
             foreach($item->meta as $meta){
                 switch($meta->meta_key){
-                    case '_variation_id': $item_array['product_id']=$this->getProductId($meta->meta_value);break;
-                    case '_product_id': $item_array['parent_id']=$this->getProductId($meta->meta_value);break;
+                    case '_variation_id': $item_array['product_id'] = DataFetcher::getProduct($meta->meta_value);break;
+                    case '_product_id': $item_array['parent_id'] = DataFetcher::getProduct($meta->meta_value);break;
                     case '_line_tax' : $item_array['tax_amount']=$meta->meta_value;break;
                     case '_tax_class' : $item_array['tax_percentage']=$this->getTaxPercentage($meta->meta_value);break;
                     case '_line_total' : $item_array['taxable_amount']=$meta->meta_value;break;

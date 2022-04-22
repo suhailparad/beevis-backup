@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Product;
 use App\Models\State;
 
 class DataFetcher{
@@ -56,6 +57,14 @@ class DataFetcher{
             'wc-pending' => 'Unpaid',
             'wc-processing' => 'Processing'
         };
+    }
+
+    public function getProduct($variation){
+        $product = Product::where('variation_id',$variation)->first();
+        if($product)
+            return $product->id;
+        else
+            return null;
     }
 
 }

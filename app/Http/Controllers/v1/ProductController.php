@@ -22,10 +22,8 @@ class ProductController extends Controller
                 wp_posts.post_title as variation
                 FROM
                 wp_posts
-                INNER JOIN wp_postmeta ON wp_posts.ID = wp_postmeta.post_id
                 WHERE wp_posts.post_type = 'product_variation'
-                and wp_posts.post_status = 'publish'
-                GROUP BY wp_posts.ID");
+                and wp_posts.post_status = 'publish'");
 
             foreach($wp_products as $wp){
                 $exploded = explode("-",str_replace(" - ","-",$wp->variation));
@@ -38,8 +36,6 @@ class ProductController extends Controller
                     ]);
                 }
             }
-
-
 
             DB::commit();
             return redirect()->back()->with('success','Migration completed successfully.');
