@@ -3,6 +3,7 @@
 use App\Http\Controllers\MigrationController;
 use App\Http\Controllers\v1\MigrateController;
 use App\Http\Controllers\v1\OrderController;
+use App\Http\Controllers\v1\ProductController;
 use App\Http\Controllers\v1\TaxController;
 use App\Http\Controllers\v1\UserController;
 use App\Http\Controllers\v1\WalletController;
@@ -49,6 +50,10 @@ Route::middleware(['auth', 'verified'])->group(function(){
         return Inertia::render('Taxes');
     })->name('taxes');
 
+    Route::get('/products', function () {
+        return Inertia::render('Product');
+    })->name('products');
+
     Route::get('/orders', function () {
         return Inertia::render('Order');
     })->name('orders');
@@ -57,6 +62,7 @@ Route::middleware(['auth', 'verified'])->group(function(){
     Route::post('/migrate/users',[UserController::class,'migrateUser'])->name('migrate.users');
     Route::post('/migrate/wallets',[WalletController::class,'migrateWallet'])->name('migrate.wallets');
     Route::post('/migrate/tax/linking',[TaxController::class,'linking'])->name('migrate.tax.linking');
+    Route::post('/migrate/product/linking',[ProductController::class,'linking'])->name('migrate.product.linking');
     Route::post('/migrate/orders',[OrderController::class,'migrate'])->name('migrate.orders');
 
 });

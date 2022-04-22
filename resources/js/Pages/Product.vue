@@ -16,7 +16,7 @@ const form = useForm({
 
 
 const submit = () => {
-    form.post(route('migrate.wallets'), {
+    form.post(route('migrate.product.linking'), {
         onFinish: () => {
             // form.offset+=form.limit;
         }
@@ -31,7 +31,7 @@ const submit = () => {
     <BreezeAuthenticatedLayout>
         <template #header>
             <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-                Wallets
+                Products
             </h2>
         </template>
 
@@ -44,13 +44,14 @@ const submit = () => {
                         <div class="flex">
                             <div>
                                 <BreezeButton @click="submit" class="ml-4 h-[40px]" :class="{ 'opacity-25': form.processing }" :disabled="form.processing">
-                                    Start Migration
+                                    Start Linking
                                 </BreezeButton>
                             </div>
                         </div>
 
                         <span class="mt-8 text-gray-500 text-md block">Result</span>
                         <div class="border border-gray-200 block mt-1 p-10 bg-slate-50 rounded">
+
                             <template v-if="form.processing">
                                 <span class="block text-slate-500 text-sm">
                                     <svg role="status" class="inline mt-[-5px] mr-2 w-4 h-4 text-gray-200 animate-spin dark:text-gray-600 fill-gray-600 dark:fill-gray-300" viewBox="0 0 100 101" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -59,8 +60,9 @@ const submit = () => {
                                     </svg>
                                     Migrating, Please wait...</span>
                             </template>
+
                             <template v-if="flash.success">
-                                <span class="text-green-600">{{flash.success}}</span>
+                                <span class="block text-green-600">{{flash.success}}</span>
                             </template>
                             <template v-if="flash.error">
                                 <span class="text-red-600">{{flash.error}}</span>

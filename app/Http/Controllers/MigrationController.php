@@ -76,7 +76,7 @@ class MigrationController extends Controller
             ->whereDate('post_date','<=','2021-12-15')
             ->orderBy('post_date')
             ->with('meta')
-            ->with(['items'=>function($q){
+            ->with(['items'=>function($q){ //where item not wallet topup whereHas('')
                 $q->with('meta');
             }])->with(['comments'=>function($q){
                 $q->with('meta');
@@ -321,6 +321,11 @@ class MigrationController extends Controller
         return match($method){
             'cod'=>1,
             'instamojo'=>2,
+            //hdfcccavenue
+            //razorpay
+            //payg
+            //wallet
+            //wallet_gateway
         };
 
     }

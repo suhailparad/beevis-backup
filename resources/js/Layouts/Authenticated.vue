@@ -39,7 +39,9 @@ const showingNavigationDropdown = ref(false);
                                 <BreezeNavLink :href="route('taxes')" :active="route().current('taxes')">
                                     Taxes
                                 </BreezeNavLink>
-
+                                <BreezeNavLink :href="route('products')" :active="route().current('products')">
+                                    Products
+                                </BreezeNavLink>
                                 <BreezeNavLink :href="route('orders')" :active="route().current('orders')">
                                     Orders
                                 </BreezeNavLink>
