@@ -3,6 +3,7 @@
 use App\Http\Controllers\MigrationController;
 use App\Http\Controllers\v1\MigrateController;
 use App\Http\Controllers\v1\UserController;
+use App\Http\Controllers\v1\WalletController;
 use App\Services\DataFetcher;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
@@ -38,8 +39,13 @@ Route::middleware(['auth', 'verified'])->group(function(){
         return Inertia::render('User');
     })->name('users');
 
+    Route::get('/wallets', function () {
+        return Inertia::render('Wallet');
+    })->name('wallets');
+
     Route::post('/migrate',[MigrateController::class,'migrate'])->name('dashboard.migrate');
     Route::post('/migrate/users',[UserController::class,'migrateUser'])->name('migrate.users');
+    Route::post('/migrate/wallets',[WalletController::class,'migrateWallet'])->name('migrate.wallets');
 
 });
 
