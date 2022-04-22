@@ -401,7 +401,7 @@ class MigrationController extends Controller
                 }
 
                 foreach($wp_order['addons'] as $item){
-                   
+
                     $addon_total+=$item['total'];
                     $_addon_item = $order->addons()->create($item);
                     $unserialized = unserialize($item['tax_data'])['total'];

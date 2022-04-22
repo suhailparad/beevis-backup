@@ -7,7 +7,7 @@ use App\Models\State;
 class DataFetcher{
 
     public function getStateByCode($code){
-        if($code == 'TR'){
+        if($code == 'TS'){
             $code = 'TG';
         }
         if($code == 'UK'){

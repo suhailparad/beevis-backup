@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\MigrationController;
 use App\Http\Controllers\v1\MigrateController;
+use App\Http\Controllers\v1\TaxController;
 use App\Http\Controllers\v1\UserController;
 use App\Http\Controllers\v1\WalletController;
 use App\Services\DataFetcher;
@@ -43,9 +44,14 @@ Route::middleware(['auth', 'verified'])->group(function(){
         return Inertia::render('Wallet');
     })->name('wallets');
 
+    Route::get('/taxes', function () {
+        return Inertia::render('Taxes');
+    })->name('taxes');
+
     Route::post('/migrate',[MigrateController::class,'migrate'])->name('dashboard.migrate');
     Route::post('/migrate/users',[UserController::class,'migrateUser'])->name('migrate.users');
     Route::post('/migrate/wallets',[WalletController::class,'migrateWallet'])->name('migrate.wallets');
+    Route::post('/migrate/tax/linking',[TaxController::class,'linking'])->name('migrate.tax.linking');
 
 });
 

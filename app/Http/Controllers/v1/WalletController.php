@@ -12,7 +12,7 @@ class WalletController extends Controller
     //
 
     public function migrateWallet(){
-        $res = DB::select(" SELECT
+        $res = DB::select("SELECT
                 wp_woo_wallet_transactions.transaction_id,
                 wp_woo_wallet_transactions.blog_id,
                 wp_woo_wallet_transactions.user_id,
