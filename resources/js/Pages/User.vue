@@ -43,11 +43,11 @@ const submit = () => {
 
                         <div class="flex">
                              <div>
-                                Limit: 
+                                Limit:
                                 <BreezeInput id="offset" name="limit" type="text" class="inline-block " v-model="form.limit" required  />
                             </div>
                             <div class="ml-4">
-                                Offset: 
+                                Offset:
                                 <BreezeInput id="limit" name="offset" type="text" class="inline-block" v-model="form.offset" required />
                             </div>
                             <div>
@@ -59,7 +59,12 @@ const submit = () => {
 
                         <span class="mt-8 text-gray-500 text-md block">Result</span>
                         <div class="border border-gray-200 block mt-1 p-10 bg-slate-50 rounded">
+                            <template v-if="flash.success">
 
+                            </template>
+                            <template v-if="flash.error">
+
+                            </template>
                         </div>
 
                     </div>

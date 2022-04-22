@@ -45,9 +45,9 @@ class UserController extends Controller
             wp_users.ID LIMIT ".request('offset').", ".request('limit'));
         $id=0;
         DB::beginTransaction();
-       
+
         try{
-           
+
             foreach($res as $result){
                 $id = $result->ID;
                 $user = DB::table('users')->insert(
@@ -97,12 +97,11 @@ class UserController extends Controller
                    'completed_at' => $result->user_registered,
                    'created_at' => $result->user_registered
                ]);
-
             }
             DB::commit();
+            return redirect()->back()->with('success','Migration completed successfully.');
         }catch(Exception $ex){
             DB::rollBack();
-            //eturn redirect()->back()->with('error',$ex->getMessage().' '.$ex->getLine().' '.$ex->getFile());
             return  $id.$ex;
         }
     }
