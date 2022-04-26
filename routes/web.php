@@ -6,7 +6,9 @@ use App\Http\Controllers\v1\OrderController;
 use App\Http\Controllers\v1\ProductController;
 use App\Http\Controllers\v1\TaxController;
 use App\Http\Controllers\v1\UserController;
+use App\Http\Controllers\v1\WaitinglistController;
 use App\Http\Controllers\v1\WalletController;
+use App\Http\Controllers\v1\WishlistController;
 use App\Services\DataFetcher;
 use Carbon\Carbon;
 use Illuminate\Foundation\Application;
@@ -55,6 +57,14 @@ Route::middleware(['auth', 'verified'])->group(function(){
         return Inertia::render('Product');
     })->name('products');
 
+    Route::get('/waitinglist', function () {
+        return Inertia::render('Waitinglist');
+    })->name('waitinglist');
+
+    Route::get('/wishlist', function () {
+        return Inertia::render('Wishlist');
+    })->name('wishlist');
+
     Route::get('/orders', function () {
         return Inertia::render('Order');
     })->name('orders');
@@ -64,6 +74,8 @@ Route::middleware(['auth', 'verified'])->group(function(){
     Route::post('/migrate/wallets',[WalletController::class,'migrateWallet'])->name('migrate.wallets');
     Route::post('/migrate/tax/linking',[TaxController::class,'linking'])->name('migrate.tax.linking');
     Route::post('/migrate/product/linking',[ProductController::class,'linking'])->name('migrate.product.linking');
+    Route::post('/migrate/waitinglist',[WaitinglistController::class,'migrate'])->name('migrate.waitinglist');
+    Route::post('/migrate/wishlist',[WishlistController::class,'migrate'])->name('migrate.wishlist');
     Route::post('/migrate/orders',[OrderController::class,'migrate'])->name('migrate.orders');
 
 });
