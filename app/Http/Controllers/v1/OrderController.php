@@ -118,6 +118,8 @@ class OrderController extends Controller
                                 'todespatch' => 'Ready to Ship',
                                 'packed' => 'Packed',
                                 'shipped' => 'Shipped',
+                                'rto' => 'RTO',
+                                'production' => 'Hold'
                             },
                         'warehouse_id' => 1,
                         'courier_id' => $wp_courier_tracking->courier_id,
@@ -165,6 +167,8 @@ class OrderController extends Controller
                         ];
                         $shipment->items()->create($shipment_items);
                         $order_invoice->items()->create($invoice_items);
+
+                        $this->createShipmentHistory($shipment,$wp_order);
                     }
                 }
             }
@@ -249,6 +253,13 @@ class OrderController extends Controller
                     case "_transaction_id" : $order_transaction['transaction_no'] = $meta->meta_value;break;
                     case "_payment_method" : $order_transaction['payment_method_id'] = DataFetcher::getPaymentMethod($meta->meta_value);break;
 
+                    case "_order_invoiced_date" : $array['shipment_created_date'] = $meta->meta_value;break;
+                    case "_order_packed_date" : $array['shipment_packed_date'] = $meta->meta_value;break;
+                    case "_order_todespatch_date" : $array['shipment_despatch_date'] = $meta->meta_value;break;
+                    case "_order_shipped_date" : $array['shipment_shipped_date'] = $meta->meta_value;break;
+                    case "_order_rto_date" : $array['shipment_rto_date'] = $meta->meta_value;break;
+                    case "_order_hold_date" : $array['shipment_hold_date'] = $meta->meta_value;break;
+
                 }
             }
 
@@ -304,6 +315,7 @@ class OrderController extends Controller
             foreach($order->comments as $comment){
                 $type='note';
                 $platform="";
+                $user_id = 1;
                 foreach($comment->meta as $meta){
                     if($meta->meta_key=="order_note_type" && $meta->meta_value=="communication"){
                         $type='communication';
@@ -313,13 +325,16 @@ class OrderController extends Controller
                     if($meta->meta_key=="order_communication_platform"){
                         $platform= $meta->meta_value;
                     }
+                    if($meta->meta_key=="note_user"){
+                        $user_id= $meta->meta_value;
+                    }
                 }
                 $order_comment = [
                     'order_id' => $order->ID,
                     'type' => $type,
                     'note' => $comment->comment_content,
                     'date' => $comment->comment_date,
-                    'user_id' => 1,
+                    'created_by' => $user_id,
                     'platform' => $platform
                 ];
                 array_push($history,$order_comment);
@@ -457,5 +472,52 @@ class OrderController extends Controller
             $products[$index]['taxable_discount'] =  $products[$index]['discount']/(($product['tax_percentage']/100)+1);
         }
         return $products;
+    }
+
+    public function createShipmentHistory($shipment,$order){
+        if(isset($order['shipment_created_date'])){
+            $shipment->histories()->create([
+                'title' => 'Created',
+                'created_at' => $order['shipment_created_date'],
+                'created_by' => 1
+            ]);
+        }
+
+        if(isset($order['shipment_packed_date'])){
+            $shipment->histories()->create([
+                'title' => 'Packed',
+                'created_at' => $order['shipment_packed_date'],
+                'created_by' => 1
+            ]);
+        }
+
+        if(isset($order['shipment_despatch_date'])){
+            $shipment->histories()->create([
+                'title' => 'Ready to Ship',
+                'created_at' => $order['shipment_despatch_date'],
+                'created_by' => 1
+            ]);
+        }
+        if(isset($order['shipment_shipped_date'])){
+            $shipment->histories()->create([
+                'title' => 'Shipped',
+                'created_at' => $order['shipment_shipped_date'],
+                'created_by' => 1
+            ]);
+        }
+        if(isset($order['shipment_rto_date'])){
+            $shipment->histories()->create([
+                'title' => 'RTO',
+                'created_at' => $order['shipment_rto_date'],
+                'created_by' => 1
+            ]);
+        }
+        if(isset($order['shipment_hold_date'])){
+            $shipment->histories()->create([
+                'title' => 'Hold',
+                'created_at' => $order['shipment_hold_date'],
+                'created_by' => 1
+            ]);
+        }
     }
 }

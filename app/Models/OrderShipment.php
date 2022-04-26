@@ -68,4 +68,8 @@ class OrderShipment extends Model
             });
         });
     }
+
+    public function histories(){
+        return $this->hasMany(ShipmentHistory::class);
+    }
 }
