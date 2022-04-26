@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Product;
 use App\Models\State;
+use Carbon\Carbon;
 
 class DataFetcher{
 
@@ -27,18 +28,17 @@ class DataFetcher{
         return match($method){
             'cod'=>1,
             'instamojo'=>2,
-            //hdfcccavenue => 1,
-            //razorpay => 1,
-            //payg => 1,
-            //wallet => 1,
-            //wallet_gateway => 1
+            'hdfcccavenue' => 3,
+            'razorpay' => 4,
+            'payg' => 5,
+            'wallet' => 6,
+            'wallet_gateway' => 6
         };
 
     }
 
     public function getOrderStatus($wp_status){
         return match($wp_status){
-
             'wc-return-requested' => 'Completed',
             'wc-return-approved' => 'Completed',
             'wc-refunded' => 'Completed',
@@ -65,6 +65,47 @@ class DataFetcher{
             return $product->id;
         else
             return null;
+    }
+
+    public function getTaxPercentage($tax_class,$state_id,$date){
+
+        if(empty($tax_class)){
+
+            $order_date = Carbon::createFromFormat('Y-m-d',$date);
+
+            $kfc_end_date = Carbon::createFromFormat('Y-m-d','2021-08-01');
+
+            $has_kfc = $order_date->lt($kfc_end_date);
+
+            if($has_kfc && $state_id==18)
+                return 19;
+            return 18;
+        }else if ($tax_class=="reduced_rate"){
+            return 5;
+        }
+    }
+
+    public function getAddonTaxPercentage($order){
+        $items = $order['products'];
+        $kfc_enabled=false;
+        $kerala_state_id = 18;
+
+        foreach($items as $item){
+            if($item['tax_percentage']==12){
+                $kfc_enabled=true;
+            }
+        }
+        if($kerala_state_id == $order['shipping_address']['state_id']){
+            //change in happenstance
+            if($kfc_enabled){
+                $tax_percentage = 12; // change to 18
+            }else{
+                $tax_percentage  =5;
+            }
+        }else{
+            $tax_percentage = 12;
+        }
+        return $tax_percentage;
     }
 
 }

@@ -164,4 +164,7 @@ class Order extends Model
     public function discounts(){
         return $this->hasMany(OrderDiscount::class);
     }
+    public function custom_note(){ //Custom note for Order Hold or Cancelled
+        return $this->hasOne(StatusNote::class)->orderBy('id','desc')->with('user');
+    }
 }
