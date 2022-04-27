@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class OrderShipment extends Model
 {
+    protected $connection= 'platoshop_mysql';
+
     protected $guarded = ['items'];
 
     public function setDateTimeAttribute($value)

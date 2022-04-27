@@ -7,5 +7,6 @@ use Illuminate\Database\Eloquent\Model;
 
 class Wallet extends Model
 {
+    protected $connection= 'platoshop_mysql';
     use HasFactory;
 }

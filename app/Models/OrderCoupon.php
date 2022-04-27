@@ -9,6 +9,8 @@ class OrderCoupon extends Model
 {
     protected $fillable = ['order_id','coupon_id'];
 
+    protected $connection= 'platoshop_mysql';
+
     public function order(){
         return $this->belongsTo(Order::class);
     }

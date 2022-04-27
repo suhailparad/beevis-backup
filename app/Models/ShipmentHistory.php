@@ -8,6 +8,6 @@ use Illuminate\Database\Eloquent\Model;
 class ShipmentHistory extends Model
 {
     use HasFactory;
-
+    protected $connection= 'platoshop_mysql';
     protected $guarded = [];
 }

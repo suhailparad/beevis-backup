@@ -11,6 +11,8 @@ use Modules\Support\Money;
 
 class OrderTransaction extends Model
 {
+    protected $connection= 'platoshop_mysql';
+
 
     protected $fillable = ['parent_id','parent_type','transaction_date',
         'transaction_no','payment_method_id','amount','mode','isPrimary'];

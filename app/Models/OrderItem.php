@@ -10,6 +10,8 @@ use Modules\Support\Money;
 class OrderItem extends Model
 {
 
+    protected $connection= 'platoshop_mysql';
+
     protected $fillable = ['additional',
         'order_id','product_id','type','type_id',
         'price','total','quantity','currency_id',

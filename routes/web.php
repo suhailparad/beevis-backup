@@ -9,9 +9,11 @@ use App\Http\Controllers\v1\UserController;
 use App\Http\Controllers\v1\WaitinglistController;
 use App\Http\Controllers\v1\WalletController;
 use App\Http\Controllers\v1\WishlistController;
+use App\Models\User;
 use App\Services\DataFetcher;
 use Carbon\Carbon;
 use Illuminate\Foundation\Application;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -85,6 +87,5 @@ require __DIR__.'/auth.php';
 
 
 Route::get('/tester',function(){
-    $data = 'a:1:{s:10:"20-04-2022";a:9:{s:6:"action";s:28:"mwb_wrma_return_product_info";s:8:"products";a:1:{i:0;a:5:{s:10:"product_id";s:7:"1405040";s:12:"variation_id";s:7:"1405071";s:7:"item_id";s:6:"844102";s:5:"price";s:4:"1699";s:3:"qty";s:1:"1";}}s:6:"amount";s:4:"1699";s:7:"subject";s:10:"Size Issue";s:6:"reason";s:15:"No Reason Enter";s:7:"orderid";s:7:"1431624";s:14:"security_check";s:10:"fe126cd5b6";s:6:"status";s:8:"complete";s:12:"approve_date";s:10:"20-04-2022";}}';
-    return unserialize($data);
+
 });

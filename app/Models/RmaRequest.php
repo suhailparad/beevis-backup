@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class RmaRequest extends Model
 {
     use HasFactory;
-
+    protected $connection= 'platoshop_mysql';
     protected $guarded=[];
 
     public function rma_items(){

@@ -8,5 +8,6 @@ use Illuminate\Database\Eloquent\Model;
 class RefundHistory extends Model
 {
     use HasFactory;
+    protected $connection= 'platoshop_mysql';
     protected $guarded=[];
 }

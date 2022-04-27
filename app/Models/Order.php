@@ -16,6 +16,8 @@ class Order extends Model
 {
     use SoftDeletes;
 
+    protected $connection= 'platoshop_mysql';
+
     protected $fillable = [
         'id',
         'customer_id', 'is_guest',
