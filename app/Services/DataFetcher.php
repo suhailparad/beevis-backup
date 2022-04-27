@@ -48,7 +48,7 @@ class DataFetcher{
             'wc-exchange-request' => 'Completed',
             'wc-exchange-cancel' => 'Completed',
             'wc-exchange-req' => 'Completed',
-            'wc-exchange-approve' => 'Completed',
+            'wc-exchange-approve' => 'Created',
             'wc-exchange-complt' => 'Completed',
             'wc-completed'=> 'Completed',
             'wc-cancelled'=> 'Cancelled',

@@ -15,6 +15,14 @@ class RmaRequest extends Model
         return $this->hasMany(RmaRequestItem::class);
     }
 
+    public function return_items(){
+        return $this->hasMany(RmaRequestItem::class)->where('movement_type','in');
+    }
+
+    public function exchange_items(){
+        return $this->hasMany(RmaRequestItem::class)->where('movement_type','out');
+    }
+
     public function histories(){
         return $this->hasMany(RmaHistory::class);
     }
@@ -29,5 +37,9 @@ class RmaRequest extends Model
 
     public function refund(){
         return $this->hasOne(OrderRefund::class,'rma_request_id','id');
+    }
+
+    public function exchange_order(){
+        return $this->hasOne(Order::class,'child_order_id','id');
     }
 }
