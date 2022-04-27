@@ -6,11 +6,16 @@ use App\Facades\DataFetcher;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\OrderInvoice;
+use App\Models\OrderItem;
 use App\Models\OrderTax;
 use App\Models\Post;
+use App\Models\RmaRequest;
 use App\Models\TaxRate;
 use App\Models\Wallet;
+use App\Models\WpCourierReverseTracking;
 use App\Models\WpCourierTracking;
+use App\Models\WpSecondaryCourierReverseTracking;
+use App\Models\WpSecondaryCourierTracking;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -76,103 +81,355 @@ class OrderController extends Controller
                         ]);
                     }
                 }
-            }
 
-            //Transaction (primary)
-            if($wp_order['transactions']['payment_method_id'] == 1)
+                //Transaction (primary)
+                if($wp_order['transactions']['payment_method_id'] == 1)
                 $wp_order['transactions']['transaction_date'] = $order->date;
-            $order->transactions()->create($wp_order['transactions']);
+                $order->transactions()->create($wp_order['transactions']);
 
-            //Wallet Tranctions (secondary)
-            $order->transactions()->create($wp_order['wallet_transaction']);
+                //Wallet Tranctions (secondary)
+                $order->transactions()->create($wp_order['wallet_transaction']);
 
-            if($order->status=="Hold"){
-                $order->custom_note()->create([
-                    'type' => $wp_order['order_hold_reason'],
-                    'note' => $wp_order['order_hold_details']
-                ]);
-            }
+                if($order->status=="Hold"){
+                    $order->custom_note()->create([
+                        'type' => $wp_order['order_hold_reason'],
+                        'note' => $wp_order['order_hold_details']
+                    ]);
+                }
 
-            if($order->status=="Cancelled"){
-                $order->custom_note()->create([
-                    'type' => $wp_order['order_cancel_reason'],
-                    'note' => $wp_order['order_cancel_details']
-                ]);
-            }
+                if($order->status=="Cancelled"){
+                    $order->custom_note()->create([
+                        'type' => $wp_order['order_cancel_reason'],
+                        'note' => $wp_order['order_cancel_details']
+                    ]);
+                }
 
-            //Order Discounts
-            $order->discounts()->createMany($wp_order['discounts']);
+                //Order Discounts
+                $order->discounts()->createMany($wp_order['discounts']);
 
-            //Shipments and Invoices
-            if($order->status != 'Unpaid' && $order->status != 'Cancelled'){
+                //Shipments and Invoices
+                if($order->status != 'Unpaid' && $order->status != 'Cancelled'){
 
-                $wp_courier_tracking = WpCourierTracking::where('order_id', $order->id)->first();
+                    $wp_courier_tracking = WpCourierTracking::where('order_id', $order->id)->first();
 
-                if($wp_courier_tracking){
-                    $shipment_array = [
-                        'order_id' => $wp_order['id'],
+                    if($wp_courier_tracking){
+                        $shipment_array = [
+                            'order_id' => $wp_order['id'],
 
-                        'status' => match($wp_order['order_admin_status']){
-                                'ready' => 'Created',
-                                'invoiced' => 'Created',
-                                'todespatch' => 'Ready to Ship',
-                                'packed' => 'Packed',
-                                'shipped' => 'Shipped',
-                                'rto' => 'RTO',
-                                'production' => 'Hold'
-                            },
-                        'warehouse_id' => 1,
-                        'courier_id' => $wp_courier_tracking->courier_id,
-                        'length' => $wp_courier_tracking->qd_pack_length,
-                        'breadth' => $wp_courier_tracking->qd_pack_breadth,
-                        'height' => $wp_courier_tracking->qd_pack_height,
-                        'weight' => $wp_courier_tracking->qd_pack_weight,
-                        'waybill_no' => $wp_courier_tracking->AWBNo,
-                        'shipment_type' => 'forward',
-                        'date_time' => $wp_courier_tracking->qd_pack_pick_up_date." 16:00:00",
-                        'sub_total' => $sub_total,
-                        'addon_total' => $addon_total,
-                        'grand_total' => $order->grand_total
-                    ];
+                            'status' => match($wp_order['order_admin_status']){
+                                    'ready' => 'Created',
+                                    'invoiced' => 'Created',
+                                    'todespatch' => 'Ready to Ship',
+                                    'packed' => 'Packed',
+                                    'shipped' => 'Shipped',
+                                    'rto' => 'RTO',
+                                    'production' => 'Hold'
+                                },
+                            'warehouse_id' => 1,
+                            'courier_id' => $wp_courier_tracking->courier_id,
+                            'length' => $wp_courier_tracking->qd_pack_length,
+                            'breadth' => $wp_courier_tracking->qd_pack_breadth,
+                            'height' => $wp_courier_tracking->qd_pack_height,
+                            'weight' => $wp_courier_tracking->qd_pack_weight,
+                            'waybill_no' => $wp_courier_tracking->AWBNo,
+                            'shipment_type' => 'forward',
+                            'date_time' => $wp_courier_tracking->qd_pack_pick_up_date." 16:00:00",
+                            'sub_total' => $sub_total,
+                            'addon_total' => $addon_total,
+                            'grand_total' => $order->grand_total
+                        ];
 
-                    $shipment = $order->shipments()->create($shipment_array);
+                        $shipment = $order->shipments()->create($shipment_array);
 
-                    if(!isset($wp_order['invoice_no'])){
-                        $wp_order['invoice_no'] = "-";
+                        if(!isset($wp_order['invoice_no'])){
+                            $wp_order['invoice_no'] = "-";
+                        }
+
+                        $order_invoice = OrderInvoice::create([
+                            'shipment_id' => $shipment->id,
+                            'order_id' => $order->id,
+                            'invoice_no' => $wp_order['invoice_no'],
+                            'invoice_date' => $shipment->date_time
+                        ]);
+
+                        foreach($order->products as $product){
+                            $shipment_items =[
+                                'shipment_id' => $shipment->id,
+                                'product_id' => $product->product_id,
+                                'order_item_id' => $product->id,
+                                'quantity' => $product->quantity,
+                                'price' => $product->price,
+                                'total' => $product->total
+                            ];
+
+                            $invoice_items =[
+                                'order_invoice_id' => $order_invoice->id,
+                                'product_id' => $product->product_id,
+                                'quantity' => $product->quantity,
+                                'rate' =>  $product->price,
+                                'total_amount' => $product->total
+                            ];
+                            $shipment->items()->create($shipment_items);
+                            $order_invoice->items()->create($invoice_items);
+
+                            $this->createShipmentHistory($shipment,$wp_order);
+                        }
                     }
 
-                    $order_invoice = OrderInvoice::create([
-                        'shipment_id' => $shipment->id,
-                        'order_id' => $order->id,
-                        'invoice_no' => $wp_order['invoice_no'],
-                        'invoice_date' => $shipment->date_time
+                }
+
+                //UPDATE RMA DEPTH and MASTER ORDER ID
+                if(isset($wp_order['parent_id'])){
+                    $master_order = $this->findMasterOrderId($wp_order['parent_id'],0);
+                    $order->update([
+                        'master_order_id' => $master_order['master_order_id'],
+                        'rma_depth' => $master_order['depth']
                     ]);
+                }
 
-                    foreach($order->products as $product){
-                        $shipment_items =[
-                            'shipment_id' => $shipment->id,
-                            'product_id' => $product->product_id,
-                            'order_item_id' => $product->id,
-                            'quantity' => $product->quantity,
-                            'price' => $product->price,
-                            'total' => $product->total
+                //RMA - Returns
+                if(isset($wp_order['rma_returns'])){
+                    $unserialized = unserialize($wp_order['rma_returns']);
+
+                    foreach($unserialized as $data){
+
+                        //RMA
+                        $rma_data =[
+                            'date_time' => date('Y-m-d h:i:s',strtotime($wp_order['rma_refund_requested_date'])),
+                            'request_type' => 'Return',
+                            'reason_type' => isset($data['subject'])?DataFetcher::getRmaReasonType($data['subject']):'Others',
+                            'request_reason' => $data['reason'],
+                            'refund_method' => $wp_order['refund_child']['refund_method'],
+                            'status' =>  match($wp_order['order_admin_status']){
+                                'refund_requested' => 'Requested',
+                                'refund_approved' => 'Approved',
+                                'refunded' => 'Completed',
+                                'refunded_partially' => 'Completed',
+                                'refund_canceled' => 'Cancelled',
+                                'refund_partial_canceled' => 'Cancelled',
+                                'refund_stock_received' => 'Processing',
+                                'refund_processing' => 'Processing',
+                                'refund_accounted' => 'Completed',
+                            },
+                            'total_amount' => $data['amount'],
+                            'paid_amount' => '',
+                            'due_amount' => '',
+                            'exchange_total' => 0,
+                            'order_id' => $order->id,
+                            'created_by'=>1,
                         ];
+                        $rma_data['paid_amount'] = $rma_data['status']=='Completed'?$rma_data['total_amount']:0;
+                        $rma_data['due_amount'] = $rma_data['status']!='Completed'?($rma_data['total_amount'])*-1:0;
+                        $rma =RmaRequest::create($rma_data);
 
-                        $invoice_items =[
-                            'order_invoice_id' => $order_invoice->id,
-                            'product_id' => $product->product_id,
-                            'quantity' => $product->quantity,
-                            'rate' =>  $product->price,
-                            'total_amount' => $product->total
-                        ];
-                        $shipment->items()->create($shipment_items);
-                        $order_invoice->items()->create($invoice_items);
+                        //RMA PRODUCTS
+                        foreach($data['products'] as $product){
+                            $rma_product_data =[
+                                'product_id' => DataFetcher::getProduct($product['variation_id']),
+                                'quantity' =>  $product['qty'],
+                                'price' => $product['price'],
+                                'total' => $product['price']*$product['qty'],
+                                'order_item_id' => '',
+                                'movement_type' => 'in',
+                                'stock_reduced' => true,
+                            ];
 
-                        $this->createShipmentHistory($shipment,$wp_order);
+                            $rma_product_data['order_item_id'] =OrderItem::where('product_id',$rma_product_data['product_id'])
+                                ->where('order_id',$order->id)->first()?->id;
+
+                            $rma->return_items()->create($rma_product_data);
+                        }
+
+                        //RMA HISTORY
+                        $this->createRmaRefundHistory($rma, $wp_order);
+
+                        //RMA Transactions
+                        if($rma->status=="Completed"){
+                            $rma->transactions()->create([
+                                'parent_id' => $rma->id,
+                                'parent_type' => 'rma',
+                                'transaction_date'=>$wp_order['rma_refund_refunded_date'],
+                                'transaction_no' => $wp_order['refund_child']['refund_transaction_id'],
+                                'payment_method_id'=>$rma->refund_method=="Wallet"?DataFetcher::getPaymentMethod('wallet'):$wp_order['transactions']['payment_method_id'],
+                                'amount' => $rma_data['total_amount'],
+                                'mode' => 'out',
+                                'remarks' => '',
+                                'status' => 'success',
+                            ]);
+                        }
+
+                        //RMA Cancel Reason
+                        $rma->histories()->where('title','Cancelled')->update(['note' => $wp_order['rma_refund_cancel_reason']]);
+
+                        //SHIPMENTS
+
+                        //Shipments and Invoices
+                        $wp_courier_tracking = WpCourierReverseTracking::where('order_id', $order->id)->first();
+
+                        if($wp_courier_tracking){
+                            $shipment_array = [
+                                'order_id' => $wp_order['id'],
+                                'status' => match($rma->status){
+                                        'Created' => 'Created',
+                                        'Approved' => 'Created',
+                                        'Processing' => 'Delivered',
+                                        'Completed' => 'Delivered',
+                                        'Cancelled' => 'Created'
+                                    },
+                                'warehouse_id' => 1,
+                                'courier_id' => $wp_courier_tracking->courier_id,
+                                'length' => $wp_courier_tracking->qd_pack_length,
+                                'breadth' => $wp_courier_tracking->qd_pack_breadth,
+                                'height' => $wp_courier_tracking->qd_pack_height,
+                                'weight' => $wp_courier_tracking->qd_pack_weight,
+                                'waybill_no' => $wp_courier_tracking->AWBNo,
+                                'shipment_type' => 'reverse',
+                                'date_time' => $wp_courier_tracking->qd_pack_pick_up_date." 16:00:00",
+                                'sub_total' => $rma->total_amount,
+                                'addon_total' => 0,
+                                'grand_total' => $rma->total_amount,
+                            ];
+
+                            $shipment = $rma->shipments()->create($shipment_array);
+
+                            foreach($rma->return_items as $product){
+                                $shipment_items =[
+                                    'shipment_id' => $shipment->id,
+                                    'product_id' => $product->product_id,
+                                    'order_item_id' => $product->order_item_id,
+                                    'quantity' => $product->quantity,
+                                    'price' => $product->price,
+                                    'total' => $product->total
+                                ];
+                                $shipment->items()->create($shipment_items);
+                            }
+                        }
+
+                        $wp_courier_trackings = WpSecondaryCourierTracking::where('order_id', $order->id)->get();
+                        foreach($wp_courier_trackings as $wp_courier_tracking){
+                            $shipment_array = [
+                                'order_id' => $wp_order['id'],
+                                'status' => match($rma->status){
+                                        'Created' => 'Created',
+                                        'Approved' => 'Created',
+                                        'Processing' => 'Delivered',
+                                        'Completed' => 'Delivered',
+                                        'Cancelled' => 'Created'
+                                    },
+                                'warehouse_id' => 1,
+                                'courier_id' => $wp_courier_tracking->courier_id,
+                                'length' => $wp_courier_tracking->qd_pack_length,
+                                'breadth' => $wp_courier_tracking->qd_pack_breadth,
+                                'height' => $wp_courier_tracking->qd_pack_height,
+                                'weight' => $wp_courier_tracking->qd_pack_weight,
+                                'waybill_no' => $wp_courier_tracking->AWBNo,
+                                'shipment_type' => 'forward',
+                                'date_time' => $wp_courier_tracking->qd_pack_pick_up_date." 16:00:00",
+                                'sub_total' => $rma->total_amount,
+                                'addon_total' => 0,
+                                'grand_total' => $rma->total_amount,
+                            ];
+
+                            $shipment = $rma->shipments()->create($shipment_array);
+
+                            foreach($rma->return_items as $product){
+                                $shipment_items =[
+                                    'shipment_id' => $shipment->id,
+                                    'product_id' => $product->product_id,
+                                    'order_item_id' => $product->order_item_id,
+                                    'quantity' => $product->quantity,
+                                    'price' => $product->price,
+                                    'total' => $product->total
+                                ];
+                                $shipment->items()->create($shipment_items);
+                            }
+                        }
+
+                        $wp_courier_trackings = WpSecondaryCourierReverseTracking::where('order_id', $order->id)->get();
+                        foreach($wp_courier_trackings as $wp_courier_tracking){
+                            $shipment_array = [
+                                'order_id' => $wp_order['id'],
+                                'status' => match($rma->status){
+                                        'Created' => 'Created',
+                                        'Approved' => 'Created',
+                                        'Processing' => 'Delivered',
+                                        'Completed' => 'Delivered',
+                                        'Cancelled' => 'Created'
+                                    },
+                                'warehouse_id' => 1,
+                                'courier_id' => $wp_courier_tracking->courier_id,
+                                'length' => $wp_courier_tracking->qd_pack_length,
+                                'breadth' => $wp_courier_tracking->qd_pack_breadth,
+                                'height' => $wp_courier_tracking->qd_pack_height,
+                                'weight' => $wp_courier_tracking->qd_pack_weight,
+                                'waybill_no' => $wp_courier_tracking->AWBNo,
+                                'shipment_type' => 'reverse',
+                                'date_time' => $wp_courier_tracking->qd_pack_pick_up_date." 16:00:00",
+                                'sub_total' => $rma->total_amount,
+                                'addon_total' => 0,
+                                'grand_total' => $rma->total_amount,
+                            ];
+
+                            $shipment = $rma->shipments()->create($shipment_array);
+
+                            foreach($rma->return_items as $product){
+                                $shipment_items =[
+                                    'shipment_id' => $shipment->id,
+                                    'product_id' => $product->product_id,
+                                    'order_item_id' => $product->order_item_id,
+                                    'quantity' => $product->quantity,
+                                    'price' => $product->price,
+                                    'total' => $product->total
+                                ];
+                                $shipment->items()->create($shipment_items);
+                            }
+                        }
+
+                        if($rma->status=="Completed"){
+                            //Refunds
+                            $refund = $rma->refunds()->create([
+                                'order_id' => $order->id,
+                                'comment' => '',
+                                'sub_total' => $rma->total_amount,
+                                'grand_total' => $rma->total_amount,
+                                'status' => '',
+                                'rma_request_id' => $rma->id,
+                                'created_by' => 1
+                            ]);
+                            foreach($rma->rma_items as $item){
+                                $refund->create([
+                                    'product_id' => $item->product_id,
+                                    'quantity' => $item->quantity,
+                                    'rate' => $item->price,
+                                    'total_amount' =>$item->rma_items->total,
+                                    'order_item_id' => $item->total_amount,
+                                    'return_to_stock' =>true
+                                ]);
+                            }
+
+                            $refund->transactions()->create([
+                                'parent_id' => $refund->id,
+                                'parent_type' => 'refund',
+                                'transaction_date'=>$wp_order['rma_refund_refunded_date'],
+                                'transaction_no' => $wp_order['refund_child']['refund_transaction_id'],
+                                'payment_method_id'=>$rma->refund_method=="Wallet" ? DataFetcher::getPaymentMethod('wallet'):$wp_order['transactions']['payment_method_id'],
+                                'amount' => $rma_data['total_amount'],
+                                'mode' => 'out',
+                                'remarks' => '',
+                                'status' => 'success',
+                            ]);
+
+                            $refund->histories()->create([
+                                'title'=>'Refunded',
+                                'created_by'=>1
+                            ]);
+                        }
                     }
                 }
-            }
 
+                //RMA  - Exchanges
+
+            }
             DB::commit();
             return redirect()->back()->with('success','Migration completed successfully.');
         }catch(Exception $ex){
@@ -193,6 +450,8 @@ class OrderController extends Controller
             })->with(['items'=>function($q){
                 $q->with('meta');
             }])->with(['comments'=>function($q){
+                $q->with('meta');
+            }])->with(['child'=>function($q){
                 $q->with('meta');
             }])->get();
 
@@ -215,6 +474,9 @@ class OrderController extends Controller
             $array['platform'] = 'Online';
             $array['status'] = DataFetcher::getOrderStatus($order->post_status);
             $array['event_tracked'] = true;
+
+            $refund_child = $this->prepareChildData($order->child);
+            $array['refund_child'] = $refund_child;
 
             $order_address_array['order_id'] = $order->ID;
 
@@ -259,6 +521,19 @@ class OrderController extends Controller
                     case "_order_shipped_date" : $array['shipment_shipped_date'] = $meta->meta_value;break;
                     case "_order_rto_date" : $array['shipment_rto_date'] = $meta->meta_value;break;
                     case "_order_hold_date" : $array['shipment_hold_date'] = $meta->meta_value;break;
+
+                    case '_order_refund_requested_date' : $array['rma_refund_requested_date'] = $meta->meta_value;break;
+                    case '_order_refund_approved_date' : $array['rma_refund_approved_date'] = $meta->meta_value;break;
+                    case '_order_refund_stock_received_date' : $array['rma_refund_processing_date'] = $meta->meta_value;break;
+                    case '_order_refund_processing_date' : $array['rma_refund_processing_date'] = $meta->meta_value;break;
+                    case '_order_refunded_date' : $array['rma_refund_refunded_date'] = $meta->meta_value;break;
+                    case '_order_refund_canceled_date' : $array['rma_refund_cancelled_date'] = $meta->meta_value;break;
+                    case '_order_refund_canceled_details' : $array['rma_refund_cancel_reason'] = $meta->meta_value;break;
+
+                    case 'mwb_wrma_exchange_order' : $array['parent_id'] = $meta->meta_value;break;
+                    case "mwb_wrma_return_product" : $array['rma_returns'] = $meta->meta_value;break;
+                    case "mwb_wrma_exchange_product" : $array['rma_exchanges'] = $meta->meta_value;break;
+                    case "mwb_wrma_return_attachment" : $array['rma_attachment'] = $meta->meta_value;break;
 
                 }
             }
@@ -516,6 +791,78 @@ class OrderController extends Controller
             $shipment->histories()->create([
                 'title' => 'Hold',
                 'created_at' => $order['shipment_hold_date'],
+                'created_by' => 1
+            ]);
+        }
+    }
+
+    public function findMasterOrderId($parent_id,$depth){
+        $order = Post::where('ID',$parent_id)
+                ->with(['meta'=>function($q){
+                    $q->where('meta_key','mwb_wrma_exchange_order');
+                }])->first();
+
+        $_parent_id=null;
+        foreach($order->meta as $meta){
+            if($meta->meta_key=="mwb_wrma_exchange_order"){
+                $_parent_id = $meta->meta_value;
+            }
+        }
+        if($_parent_id){
+            $depth++;
+            $this->findMasterOrderId($_parent_id,$depth);
+        }
+        return ['master_order_id'=>$parent_id,'depth'=>$depth];
+    }
+
+    public function prepareChildData($childrens){
+        $data = [];
+        foreach($childrens[0]->meta as $meta){
+            switch($meta->meta_key){
+                case "_refund_method":$data['refund_method'] = $meta->meta_value=="Mannual"?"Bank Transfer":"Wallet" ; break;
+                case "_refund_transaction_id":$data['refund_transaction_id'] = $meta->meta_value; break;
+            }
+        }
+        return $data;
+    }
+
+    public function createRmaRefundHistory($rma,$order){
+        if(isset($order['rma_refund_requested_date'])){
+            $rma->histories()->create([
+                'title' => 'Requested',
+                'created_at' => $order['rma_refund_requested_date'],
+                'created_by' => 1
+            ]);
+        }
+
+        if(isset($order['_order_refund_approved_date'])){
+            $rma->histories()->create([
+                'title' => 'Approved',
+                'created_at' => $order['_order_refund_approved_date'],
+                'created_by' => 1
+            ]);
+        }
+
+        if(isset($order['rma_refund_processing_date'])){
+            $rma->histories()->create([
+                'title' => 'Processing',
+                'created_at' => $order['rma_refund_processing_date'],
+                'created_by' => 1
+            ]);
+        }
+
+        if(isset($order['rma_refund_refunded_date'])){
+            $rma->histories()->create([
+                'title' => 'Completed',
+                'created_at' => $order['rma_refund_refunded_date'],
+                'created_by' => 1
+            ]);
+        }
+
+        if(isset($order['rma_refund_cancelled_date'])){
+            $rma->histories()->create([
+                'title' => 'Cancelled',
+                'created_at' => $order['rma_refund_cancelled_date'],
                 'created_by' => 1
             ]);
         }

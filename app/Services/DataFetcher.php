@@ -108,4 +108,12 @@ class DataFetcher{
         return $tax_percentage;
     }
 
+    public function getRmaReasonType($type){
+        return match($type){
+            'Damaged Product' => 'Damaged Product',
+            'Size Issue' => 'Size Issue',
+            'Different Color' => 'Colour Issue'
+        };
+    }
+
 }

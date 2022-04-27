@@ -22,4 +22,9 @@ class Post extends Model
     public function comments(){
         return $this->hasMany(Comment::class,'comment_post_ID','ID');
     }
+
+    public function child(){
+        return $this->hasMany(Post::class,'post_parent','ID')->where('post_type','shop_order_refund');
+    }
+
 }
