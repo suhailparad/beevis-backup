@@ -7,6 +7,8 @@ use Modules\Support\Money;
 
 class OrderRefund extends Model
 {
+    protected $connection= 'platoshop_mysql';
+
     protected $fillable = ['order_id','user_id','comment','sub_total','grand_total','status','rma_request_id'];
 
     protected $appends=[
@@ -47,5 +49,8 @@ class OrderRefund extends Model
     }
     public function order(){
         return $this->belongsTo(Order::class);
+    }
+    public function histories(){
+        return $this->hasMany(RefundHistory::class);
     }
 }

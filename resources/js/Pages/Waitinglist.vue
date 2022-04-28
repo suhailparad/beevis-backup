@@ -10,15 +10,15 @@ const props = defineProps({
 });
 
 const form = useForm({
-    limit: 10000,
-    offset: 10000,
+    // limit: 10000,
+    // offset: 10000,
 });
 
 
 const submit = () => {
-    form.post(route('migrate.users'), {
+    form.post(route('migrate.waitinglist'), {
         onFinish: () => {
-            form.offset+=form.limit;
+            // form.offset+=form.limit;
         }
     });
 };
@@ -31,7 +31,7 @@ const submit = () => {
     <BreezeAuthenticatedLayout>
         <template #header>
             <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-                Dashboard
+                Waitinglist
             </h2>
         </template>
 
@@ -42,14 +42,6 @@ const submit = () => {
                         <h5 class="mb-5">Platoshop Migration Tool!</h5>
 
                         <div class="flex">
-                             <div>
-                                Limit:
-                                <BreezeInput id="offset" name="limit" type="text" class="inline-block " v-model="form.limit" required  />
-                            </div>
-                            <div class="ml-4">
-                                Offset:
-                                <BreezeInput id="limit" name="offset" type="text" class="inline-block" v-model="form.offset" required />
-                            </div>
                             <div>
                                 <BreezeButton @click="submit" class="ml-4 h-[40px]" :class="{ 'opacity-25': form.processing }" :disabled="form.processing">
                                     Start Migration

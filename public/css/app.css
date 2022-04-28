@@ -686,11 +686,17 @@ select {
 .mt-1 {
   margin-top: 0.25rem;
 }
+<<<<<<< HEAD
 .mb-4 {
   margin-bottom: 1rem;
 }
+=======
+>>>>>>> c5a4bab001c2e7aa158116b75d1acda61259dbaa
 .mt-\[-5px\] {
   margin-top: -5px;
+}
+.mb-4 {
+  margin-bottom: 1rem;
 }
 .block {
   display: block;
@@ -1118,13 +1124,20 @@ select {
   --tw-text-opacity: 1;
   color: rgb(31 41 55 / var(--tw-text-opacity));
 }
+<<<<<<< HEAD
 .text-green-600 {
   --tw-text-opacity: 1;
   color: rgb(22 163 74 / var(--tw-text-opacity));
 }
+=======
+>>>>>>> c5a4bab001c2e7aa158116b75d1acda61259dbaa
 .text-slate-500 {
   --tw-text-opacity: 1;
   color: rgb(100 116 139 / var(--tw-text-opacity));
+}
+.text-green-600 {
+  --tw-text-opacity: 1;
+  color: rgb(22 163 74 / var(--tw-text-opacity));
 }
 .underline {
   -webkit-text-decoration-line: underline;

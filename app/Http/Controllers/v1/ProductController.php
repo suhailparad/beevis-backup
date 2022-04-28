@@ -45,8 +45,6 @@ class ProductController extends Controller
                 }
             }
 
-
-
             DB::commit();
             return redirect()->back()->with('success','Migration completed successfully.');
         }catch(Exception $ex){

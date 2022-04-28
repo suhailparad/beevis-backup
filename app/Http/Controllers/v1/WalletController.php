@@ -33,12 +33,12 @@ class WalletController extends Controller
             foreach($res as $result){
                 $id=$result->transaction_id;
 
-                $wallet = DB::table('wallets')->insert(
+                $wallet = DB::connection('platoshop_mysql')->table('wallets')->insert(
                     array(
                         'id'     =>   $result->transaction_id,
                         'transaction_date' =>  $result->date,
                         'customer_id' =>  $result->user_id,
-                        'type' =>  $result->type,
+                        'type' =>  ucfirst($result->type),
                         'amount' => $result->amount,
                         'balance' =>  $result->balance,
                         'channel_id' => 1,

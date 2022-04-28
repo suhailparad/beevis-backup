@@ -61,10 +61,10 @@ const submit = () => {
                                     Migrating, Please wait...</span>
                             </template>
 
-                            <template v-if="flash.success">
-                                <span class="block text-green-600">{{flash.success}}</span>
+                            <template v-if="flash.success && !form.processing">
+                                <span class="text-green-600">{{flash.success}}</span>
                             </template>
-                            <template v-if="flash.error">
+                            <template v-if="flash.error && !form.processing">
                                 <span class="text-red-600">{{flash.error}}</span>
                             </template>
                         </div>

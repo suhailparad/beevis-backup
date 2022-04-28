@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 class ShipmentItem extends Model
 {
 
+    protected $connection= 'platoshop_mysql';
+
     protected $fillable = ['shipment_id','product_id','quantity',
         'unit_id','price','total','order_item_id'];
 

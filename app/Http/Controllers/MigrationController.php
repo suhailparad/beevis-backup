@@ -445,7 +445,7 @@ class MigrationController extends Controller
                     $wp_courier_tracking = WpCourierTracking::where('order_id', $order->id)->first();
 
                     if($wp_courier_tracking){
-                        \Log::info($wp_order['id']);
+
                         $shipment_array = [
                             'order_id' => $wp_order['id'],
 
@@ -471,6 +471,7 @@ class MigrationController extends Controller
                         ];
 
                         $shipment = $order->shipments()->create($shipment_array);
+
                         if(!isset($wp_order['invoice_no'])){
                             if($wp_order['id'] == 29851){
                                 $wp_order['invoice_no'] = 7423;
@@ -482,6 +483,7 @@ class MigrationController extends Controller
                                 $wp_order['invoice_no'] = 7421;
                             }
                         }
+
                         $order_invoice = OrderInvoice::create([
                             'shipment_id' => $shipment->id,
                             'order_id' => $order->id,

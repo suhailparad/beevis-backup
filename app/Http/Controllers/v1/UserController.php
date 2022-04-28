@@ -50,7 +50,7 @@ class UserController extends Controller
 
             foreach($res as $result){
                 $id = $result->ID;
-                $user = DB::table('users')->insert(
+                $user = DB::connection('platoshop_mysql')->table('users')->insert(
                     array(
                         'id'     =>   $result->ID,
                         'first_name'   =>   $result->billing_first_name,
@@ -64,15 +64,14 @@ class UserController extends Controller
                     )
                );
 
-               $role = DB::table('role_users')->insert([
+               $role = DB::connection('platoshop_mysql')->table('role_users')->insert([
                    'user_id' => $result->ID,
                    'role_id' => 2,
                    'created_at' => $result->user_registered
                ]);
 
                if($result->billing_address_1 && $result->billing_postcode){
-                    \Log::info($result->billing_state);
-                    $address = DB::table('addresses')->insert([
+                    $address = DB::connection('platoshop_mysql')->table('addresses')->insert([
                         'customer_id' => $result->ID,
                         'first_name'   =>   $result->billing_first_name,
                         'last_name'   =>   $result->billing_last_name,
@@ -89,7 +88,7 @@ class UserController extends Controller
                }
 
                //Activation
-               $address = DB::table('activations')->insert([
+               $activation = DB::connection('platoshop_mysql')->table('activations')->insert([
                    'user_id' => $result->ID,
                    'code' => md5($result->ID),
                    'completed'=>1,

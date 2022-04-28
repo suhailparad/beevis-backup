@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class OrderShipment extends Model
 {
+    protected $connection= 'platoshop_mysql';
+
     protected $guarded = ['items'];
 
     public function setDateTimeAttribute($value)
@@ -67,5 +69,9 @@ class OrderShipment extends Model
                     ->orWhere('waybill_no', 'like', '%' . $search . '%');
             });
         });
+    }
+
+    public function histories(){
+        return $this->hasMany(ShipmentHistory::class);
     }
 }
