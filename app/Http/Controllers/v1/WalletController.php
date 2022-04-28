@@ -33,7 +33,7 @@ class WalletController extends Controller
             foreach($res as $result){
                 $id=$result->transaction_id;
 
-                $wallet = DB::table('users')->insert(
+                $wallet = DB::table('wallets')->insert(
                     array(
                         'id'     =>   $result->transaction_id,
                         'transaction_date' =>  $result->date,
@@ -41,7 +41,7 @@ class WalletController extends Controller
                         'type' =>  $result->type,
                         'amount' => $result->amount,
                         'balance' =>  $result->balance,
-                        'channel_id' => $result->channel_id,
+                        'channel_id' => 1,
                         'remarks' => $result->details,
                         'created_at' => $result->date,
                         'token' => md5($result->transaction_id),
