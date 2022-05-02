@@ -3,22 +3,38 @@ import BreezeAuthenticatedLayout from '@/Layouts/Authenticated.vue';
 import { Head,useForm } from '@inertiajs/inertia-vue3';
 import BreezeButton from '@/Components/Button.vue';
 import BreezeInput from '@/Components/Input.vue';
-import { onMounted } from 'vue';
-
+import { onMounted , ref} from 'vue';
+import moment from 'moment';
 const props = defineProps({
     flash: Object,
 });
 
 const form = useForm({
-    start_date: '',
-    end_date: ''
+    start_date: '2021-04-01',
+    end_date: '2021-04-01'
 });
+const index = ref(0);
+const result = ref(null);
 
 const submit = () => {
+    result.value=null;
     form.post(route('migrate.orders'), {
-        onFinish: () => {
-
-        }
+        onSuccess: (data) => {
+            console.log(data);
+            result.value = data.props.flash.success;
+        },
+         onFinish: () => {
+            form.start_date = moment(form.start_date).add(1, 'days').format('YYYY-MM-DD');
+            form.end_date =  form.start_date;
+            index.value+=1;
+            if(index.value<10 && result.value){
+               submit();
+            }
+            else {
+               index.value=0; 
+               result.value=null;
+           }
+         }
     });
 };
 
@@ -43,11 +59,11 @@ const submit = () => {
                         <div class="flex">
                             <div>
                                 From :
-                                <BreezeInput id="email" type="date" class="inline-block " v-model="form.from_date" required  />
+                                <BreezeInput id="email" type="date" class="inline-block " v-model="form.start_date" required  />
                             </div>
                             <div class="ml-4">
                                 To :
-                                <BreezeInput id="email" type="date" class="inline-block" v-model="form.to_date" required />
+                                <BreezeInput id="email" type="date" class="inline-block" v-model="form.end_date" required />
                             </div>
                             <div>
                                 <BreezeButton @click="submit" class="ml-4 h-[40px]" :class="{ 'opacity-25': form.processing }" :disabled="form.processing">

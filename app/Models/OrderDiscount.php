@@ -6,8 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class OrderDiscount extends Model
 {
-    protected $connection= 'platoshop_mysql';
+    // protected $connection= 'platoshop_mysql';
 
-    protected $fillable = ['order_id','type','discount_value','amount','parent_id','parent_type','remarks','status'];
+    protected $fillable = ['order_id','type','discount_value','taxable_discount_amount','amount','parent_id','parent_type','remarks','status'];
 
 }

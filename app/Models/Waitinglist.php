@@ -9,7 +9,9 @@ class Waitinglist extends Model
 {
     use HasFactory;
 
-    protected $connection= 'platoshop_mysql';
+    // protected $connection= 'platoshop_mysql';
 
     protected $guarded=[];
+    
+    protected $table="waiting_lists";
 }

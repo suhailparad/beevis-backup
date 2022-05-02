@@ -9,6 +9,6 @@ class Address extends Model
 {
     use HasFactory;
 
-    protected $connection= 'platoshop_mysql';
+    // protected $connection= 'platoshop_mysql';
 
 }

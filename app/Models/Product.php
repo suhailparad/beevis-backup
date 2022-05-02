@@ -9,6 +9,11 @@ class Product extends Model
 {
     use HasFactory;
 
-    protected $connection= 'platoshop_mysql';
+    // protected $connection= 'platoshop_mysql';
+
+    public function channel()
+    {
+        return $this->hasOne(ProductChannel::class);
+    }
 
 }

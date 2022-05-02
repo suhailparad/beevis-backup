@@ -9,7 +9,7 @@ use Modules\Tax\Entities\TaxRate;
 class OrderTax extends Model
 {
 
-    protected $connection= 'platoshop_mysql';
+    // protected $connection= 'platoshop_mysql';
 
     protected $fillable = ['order_item_id','tax_rate_id','rate','tax_amount'];
 

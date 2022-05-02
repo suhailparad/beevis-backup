@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class OrderShipment extends Model
 {
-    protected $connection= 'platoshop_mysql';
+    // protected $connection= 'platoshop_mysql';
 
     protected $guarded = ['items'];
 
@@ -19,7 +19,7 @@ class OrderShipment extends Model
 
     public function save(array $options = array())
     {
-        $this->user_id = auth()->id();
+        //$this->user_id = auth()->id();
         parent::save($options);
     }
 

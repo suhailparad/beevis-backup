@@ -11,7 +11,7 @@ class OrderAddress extends Model
 
     protected $guarded = ['id','full_name','cart_id'];
 
-    protected $connection= 'platoshop_mysql';
+    // protected $connection= 'platoshop_mysql';
 
     public function state(){
         return $this->belongsTo(State::class);

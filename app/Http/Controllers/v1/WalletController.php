@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-
+use Illuminate\Support\Facades\Config;
 class WalletController extends Controller
 {
     //
@@ -27,13 +27,17 @@ class WalletController extends Controller
 
         $id=0;
 
+        Config::set('database.connections.mysql', Config::get('database.connections.platoshop_mysql'));
+        DB::purge('mysql');
+        DB::reconnect('mysql');
+
         DB::beginTransaction();
         try{
 
             foreach($res as $result){
                 $id=$result->transaction_id;
 
-                $wallet = DB::connection('platoshop_mysql')->table('wallets')->insert(
+                $wallet = DB::table('wallets')->insert(
                     array(
                         'id'     =>   $result->transaction_id,
                         'transaction_date' =>  $result->date,

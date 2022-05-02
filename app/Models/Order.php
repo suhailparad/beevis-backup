@@ -4,19 +4,14 @@ namespace App\Models;
 
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Modules\Channel\Entities\Channel;
-use Modules\Customer\Entities\Customer;
-use Modules\OrderRma\Entities\RmaRequest;
-use Modules\ShippingMethod\Entities\ShippingMethod;
 use Modules\Support\Money;
-use Modules\User\Entities\User;
 use Illuminate\Database\Eloquent\Model;
 
 class Order extends Model
 {
     use SoftDeletes;
 
-    protected $connection= 'platoshop_mysql';
+    // protected $connection= 'platoshop_mysql';
 
     protected $fillable = [
         'id',
@@ -29,7 +24,10 @@ class Order extends Model
         'email',
         'phone',
         'token',
-        'channel_id'
+        'channel_id',
+        'master_order_id',
+        'parent_id',
+        'depth'
     ];
 
     protected $casts=[
@@ -126,6 +124,11 @@ class Order extends Model
     public function transactions()
     {
         return $this->hasMany(OrderTransaction::class,'parent_id','id')->where('parent_type','order');
+    }
+
+    public function primary_transaction()
+    {
+        return $this->hasOne(OrderTransaction::class,'parent_id','id')->where('parent_type','order')->where('isPrimary',true);
     }
 
     public function setDateAttribute($date)

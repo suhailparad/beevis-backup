@@ -19,21 +19,32 @@ use App\Models\WpSecondaryCourierTracking;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Config;
 
 class OrderController extends Controller
 {
     //
 
     public function migrate(){
+        //return redirect()->back()->with('success','Migration completed successfully.');
+
+        exec('rm ' . storage_path('logs/*.log'));
+
+        $wp_orders=$this->prepareOrderData();
+        
+        Config::set('database.connections.mysql', Config::get('database.connections.platoshop_mysql'));
+        DB::purge('mysql');
+        DB::reconnect('mysql');
+        
         $id=0;
         DB::beginTransaction();
         try{
-
-            $wp_orders=$this->prepareOrderData();
-
             foreach($wp_orders as $wp_order){
-                $order = Order::create($wp_order);
+                $id = $wp_order['id'];
+                
+                \Log::info($id);
 
+                $order = Order::create($wp_order);
                 $order->orderHistory()->createMany($wp_order['comments']);
                 $order->billingAddress()->create($wp_order['billing_address']);
                 $order->shippingAddress()->create($wp_order['shipping_address']);
@@ -82,13 +93,47 @@ class OrderController extends Controller
                     }
                 }
 
-                //Transaction (primary)
-                if($wp_order['transactions']['payment_method_id'] == 1)
-                $wp_order['transactions']['transaction_date'] = $order->date;
-                $order->transactions()->create($wp_order['transactions']);
+                $order->update([
+                    'grand_total' => $sub_total + $addon_total
+                ]);
+
+                 //UPDATE RMA DEPTH and MASTER ORDER ID
+                 if(isset($wp_order['parent_id'])){
+                    $master_order = $this->findMasterOrderId($wp_order['parent_id'],1);
+                    
+                    $order->update([
+                        'master_order_id' => $master_order['master_order_id'],
+                        'rma_depth' => $master_order['depth']
+                    ]);
+                }
+                $master_transaction_payment_method_id=null;
+                if($order->grand_total>0){
+                    //Transaction (primary)
+                    if(isset($wp_order['transactions']['payment_method_id'])){
+                        if($wp_order['transactions']['payment_method_id'] == 1)
+                            $wp_order['transactions']['transaction_date'] = $order->date;
+                        
+                        $order->transactions()->create($wp_order['transactions']);
+                        $master_transaction_payment_method_id = $wp_order['transactions']['payment_method_id'];
+                    }
+                    
+                }else{
+                    
+                    if($order->master_order_id){
+                      
+                        $master_order = Order::find($order->master_order_id);
+                        if($master_order){
+                            $master_transaction_payment_method_id = $master_order->primary_transaction->payment_method_id;
+                        }else{
+                            $master_wp_order = $this->prepareMasterOrderFromWp($order->master_order_id);
+                            $master_transaction_payment_method_id = $master_wp_order['transaction']['payment_method_id'];
+                        }
+                    }
+                }
 
                 //Wallet Tranctions (secondary)
-                $order->transactions()->create($wp_order['wallet_transaction']);
+                if(count($wp_order['wallet_transaction'])>0)
+                    $order->transactions()->create($wp_order['wallet_transaction']);
 
                 if($order->status=="Hold"){
                     $order->custom_note()->create([
@@ -110,9 +155,10 @@ class OrderController extends Controller
                 //Shipments and Invoices
                 if($order->status != 'Unpaid' && $order->status != 'Cancelled'){
 
-                    $wp_courier_tracking = WpCourierTracking::where('order_id', $order->id)->first();
+                    $wp_courier_tracking = $wp_order['wp_courier_tracking'];
 
                     if($wp_courier_tracking){
+
                         $shipment_array = [
                             'order_id' => $wp_order['id'],
 
@@ -123,7 +169,8 @@ class OrderController extends Controller
                                     'packed' => 'Packed',
                                     'shipped' => 'Shipped',
                                     'rto' => 'RTO',
-                                    'production' => 'Hold'
+                                    'production' => 'Hold',
+                                    default => 'Shipped'
                                 },
                             'warehouse_id' => 1,
                             'courier_id' => $wp_courier_tracking->courier_id,
@@ -177,15 +224,8 @@ class OrderController extends Controller
                     }
 
                 }
-
-                //UPDATE RMA DEPTH and MASTER ORDER ID
-                if(isset($wp_order['parent_id'])){
-                    $master_order = $this->findMasterOrderId($wp_order['parent_id'],0);
-                    $order->update([
-                        'master_order_id' => $master_order['master_order_id'],
-                        'rma_depth' => $master_order['depth']
-                    ]);
-                }
+              
+               
 
                 //RMA - Returns
                 if(isset($wp_order['rma_returns'])){
@@ -199,7 +239,7 @@ class OrderController extends Controller
                             'request_type' => 'Return',
                             'reason_type' => isset($data['subject'])?DataFetcher::getRmaReasonType($data['subject']):'Others',
                             'request_reason' => $data['reason'],
-                            'refund_method' => $wp_order['refund_child']['refund_method'],
+                            'refund_method' => isset($wp_order['refund_child']) && isset($wp_order['refund_child']['refund_method']) ?$wp_order['refund_child']['refund_method']:null,
                             'status' =>  match($wp_order['order_admin_status']){
                                 'refund_requested' => 'Requested',
                                 'refund_approved' => 'Approved',
@@ -229,11 +269,13 @@ class OrderController extends Controller
                                 'quantity' =>  $product['qty'],
                                 'price' => $product['price'],
                                 'total' => $product['price']*$product['qty'],
-                                'order_item_id' => '',
+                                'order_item_id' => null,
                                 'movement_type' => 'in',
                                 'stock_reduced' => true,
                             ];
-
+                            
+                           
+                            
                             $rma_product_data['order_item_id'] =OrderItem::where('product_id',$rma_product_data['product_id'])
                                 ->where('order_id',$order->id)->first()?->id;
 
@@ -244,13 +286,29 @@ class OrderController extends Controller
                         $this->createRmaRefundHistory($rma, $wp_order);
 
                         //RMA Transactions
+                        if($order->master_order_id){    
+                            $payment_method_id = $master_transaction_payment_method_id;
+                        }else{
+                            $payment_method_id = $wp_order['transactions']['payment_method_id'];
+                        }
+                        // $this->walletTransactionFinder($order,$item_array['amount']);
+
                         if($rma->status=="Completed"){
+                            $transaction_no=null;
+
+                            if(isset($wp_order['refund_child']['refund_transaction_id'])){
+                                $transaction_no = $wp_order['refund_child']['refund_transaction_id'];
+                            }else{
+                                if($rma->refund_method=="Wallet")
+                                    $transaction_no = $this->walletTransactionFinder($order,$rma_data['total_amount']);
+                            }
+
                             $rma->transactions()->create([
                                 'parent_id' => $rma->id,
                                 'parent_type' => 'rma',
                                 'transaction_date'=>$wp_order['rma_refund_refunded_date'],
-                                'transaction_no' => isset($wp_order['refund_child']['refund_transaction_id'])?$wp_order['refund_child']['refund_transaction_id']:null,
-                                'payment_method_id'=>$rma->refund_method=="Wallet"?DataFetcher::getPaymentMethod('wallet'):$wp_order['transactions']['payment_method_id'],
+                                'transaction_no' => $transaction_no,
+                                'payment_method_id'=>$rma->refund_method=="Wallet"?DataFetcher::getPaymentMethod('wallet'):$payment_method_id ,
                                 'amount' => $rma_data['total_amount'],
                                 'mode' => 'out',
                                 'remarks' => '',
@@ -262,7 +320,7 @@ class OrderController extends Controller
                         $rma->histories()->where('title','Cancelled')->update(['note' => $wp_order['rma_refund_cancel_reason']]);
 
                         //Shipments
-                        $wp_courier_tracking = WpCourierReverseTracking::where('order_id', $order->id)->first();
+                        $wp_courier_tracking = $wp_order['wp_courier_reverse_tracking'];
 
                         if($wp_courier_tracking){
                             $shipment_array = [
@@ -303,7 +361,7 @@ class OrderController extends Controller
                             }
                         }
 
-                        $wp_courier_trackings = WpSecondaryCourierTracking::where('order_id', $order->id)->get();
+                        $wp_courier_trackings = $wp_order['wp_secondary_courier_trackings'];
                         foreach($wp_courier_trackings as $wp_courier_tracking){
                             $shipment_array = [
                                 'order_id' => $wp_order['id'],
@@ -343,7 +401,7 @@ class OrderController extends Controller
                             }
                         }
 
-                        $wp_courier_trackings = WpSecondaryCourierReverseTracking::where('order_id', $order->id)->get();
+                        $wp_courier_trackings = $wp_order['wp_secondary_courier_reverse_trackings'];
                         foreach($wp_courier_trackings as $wp_courier_tracking){
                             $shipment_array = [
                                 'order_id' => $wp_order['id'],
@@ -385,17 +443,17 @@ class OrderController extends Controller
 
                         if($rma->status=="Completed"){
                             //Refunds
-                            $refund = $rma->refunds()->create([
-                                'order_id' => $order->id,
+                            $refund = $rma->refund()->create([
+                                'order_id' => $rma->order_id,
                                 'comment' => '',
                                 'sub_total' => $rma->total_amount,
                                 'grand_total' => $rma->total_amount,
-                                'status' => '',
+                                'status' => 'Refunded',
                                 'rma_request_id' => $rma->id,
                                 'created_by' => 1
                             ]);
                             foreach($rma->return_items as $item){
-                                $refund->create([
+                                $refund->items()->create([
                                     'product_id' => $item->product_id,
                                     'quantity' => $item->quantity,
                                     'rate' => $item->price,
@@ -405,12 +463,21 @@ class OrderController extends Controller
                                 ]);
                             }
 
+                            $transaction_no=null;
+
+                            if(isset($wp_order['refund_child']['refund_transaction_id'])){
+                                $transaction_no = $wp_order['refund_child']['refund_transaction_id'];
+                            }else{
+                                if($rma->refund_method=="Wallet")
+                                    $transaction_no = $this->walletTransactionFinder($order,$rma_data['total_amount']);
+                            }
+
                             $refund->transactions()->create([
                                 'parent_id' => $refund->id,
                                 'parent_type' => 'refund',
                                 'transaction_date'=>$wp_order['rma_refund_refunded_date'],
-                                'transaction_no' => isset($wp_order['refund_child']['refund_transaction_id'])?$wp_order['refund_child']['refund_transaction_id']:null,
-                                'payment_method_id'=>$rma->refund_method=="Wallet" ? DataFetcher::getPaymentMethod('wallet'):$wp_order['transactions']['payment_method_id'],
+                                'transaction_no' => $transaction_no,
+                                'payment_method_id'=>$rma->refund_method=="Wallet" ? DataFetcher::getPaymentMethod('wallet'):$master_transaction_payment_method_id,
                                 'amount' => $rma_data['total_amount'],
                                 'mode' => 'out',
                                 'remarks' => '',
@@ -438,7 +505,7 @@ class OrderController extends Controller
                             'request_type' => 'Exchange',
                             'reason_type' => isset($data['subject'])?DataFetcher::getRmaReasonType($data['subject']):'Others',
                             'request_reason' => $data['reason'],
-                            'refund_method' => $wp_order['refund_child']['refund_method'],
+                            'refund_method' => isset($wp_order['refund_child']) && isset($wp_order['refund_child']['refund_method']) ?$wp_order['refund_child']['refund_method']:null,
                             'status' =>  match($wp_order['order_admin_status']){
                                 'exchange_requested' => 'Requested',
                                 'exchange_approved' => 'Approved',
@@ -466,14 +533,14 @@ class OrderController extends Controller
                                 'quantity' =>  $product['qty'],
                                 'price' => $product['price'],
                                 'total' => $product['price']*$product['qty'],
-                                'order_item_id' => '',
+                                'order_item_id' => null,
                                 'movement_type' => 'in',
                                 'stock_reduced' => false,
                             ];
 
-                            $rma_product_data['order_item_id'] =OrderItem::where('product_id',$rma_product_data['product_id'])
+                            $rma_product_data['order_item_id'] = OrderItem::where('product_id',$rma_product_data['product_id'])
                                 ->where('order_id',$order->id)->first()?->id;
-
+    
                             $rma->return_items()->create($rma_product_data);
                             $return_total +=$rma_product_data['total'];
                         }
@@ -486,7 +553,7 @@ class OrderController extends Controller
                                 'quantity' =>  $product['qty'],
                                 'price' => $product['price'],
                                 'total' => $product['price']*$product['qty'],
-                                'order_item_id' => '',
+                                'order_item_id' => null,
                                 'movement_type' => 'out',
                                 'stock_reduced' => true,
                             ];
@@ -499,14 +566,14 @@ class OrderController extends Controller
 
                         $rma->update([
                             'total_amount' => abs($rma_total),
-                            'paid_amount' =>  $rma_data['status']=='Completed'?$rma_total:0,
+                            'paid_amount' =>  $rma_data['status']=='Completed'?abs($rma_total):0,
                             'due_amount' => $rma_data['status']!='Completed'?($rma_total):0,
                             'exchange_total' => $exchange_total,
                         ]);
 
                         //RMA HISTORY
                         $this->createRmaExchangeHistory($rma, $wp_order);
-                        $rma->histories()->where('title','Cancelled')->update(['note' => $wp_order['_order_exchange_canceled_details']]);
+                        $rma->histories()->where('title','Cancelled')->update(['note' => $wp_order['rma_exchange_cancel_reason']]);
 
 
                         //SHIPMENTS
@@ -633,17 +700,17 @@ class OrderController extends Controller
 
                         if($rma->status=="Completed" && $rma_total<0){
                             //Refunds
-                            $refund = $rma->refunds()->create([
-                                'order_id' => $order->id,
+                            $refund = $rma->refund()->create([
+                                'order_id' =>  $rma->order_id,
                                 'comment' => '',
                                 'sub_total' => abs($rma_total),
                                 'grand_total' => abs($rma_total),
-                                'status' => '',
+                                'status' => 'Refunded',
                                 'rma_request_id' => $rma->id,
                                 'created_by' => 1
                             ]);
                             foreach($rma->return_items as $item){
-                                $refund->create([
+                                $refund->items()->create([
                                     'product_id' => $item->product_id,
                                     'quantity' => $item->quantity,
                                     'rate' => $item->price,
@@ -652,13 +719,22 @@ class OrderController extends Controller
                                     'return_to_stock' =>true
                                 ]);
                             }
+                            
+                            $transaction_no=null;
+
+                            if(isset($wp_order['refund_child']['refund_transaction_id'])){
+                                $transaction_no = $wp_order['refund_child']['refund_transaction_id'];
+                            }else{
+                                if($rma->refund_method=="Wallet")
+                                    $transaction_no = $this->walletTransactionFinder($order,abs($rma_total));
+                            }
 
                             $refund->transactions()->create([
                                 'parent_id' => $refund->id,
                                 'parent_type' => 'refund',
                                 'transaction_date'=>$wp_order['rma_exchange_completed_date'],
-                                'transaction_no' => isset($wp_order['refund_child']['refund_transaction_id'])?$wp_order['refund_child']['refund_transaction_id']:null,
-                                'payment_method_id'=>$rma->refund_method=="Wallet" ? DataFetcher::getPaymentMethod('wallet'):$wp_order['transactions']['payment_method_id'],
+                                'transaction_no' =>  $transaction_no,
+                                'payment_method_id'=>$rma->refund_method=="Wallet" ? DataFetcher::getPaymentMethod('wallet'):$master_transaction_payment_method_id,
                                 'amount' => abs($rma_total),
                                 'mode' => 'out',
                                 'remarks' => '',
@@ -673,21 +749,33 @@ class OrderController extends Controller
 
                         //RMA Transactions
                         if($rma_total<0){
-                            $rma->transactions()->create([
-                                'parent_id' => $rma->id,
-                                'parent_type' => 'rma',
-                                'transaction_date'=>$wp_order['rma_exchange_completed_date'],
-                                'transaction_no' => isset($wp_order['refund_child']['refund_transaction_id'])?$wp_order['refund_child']['refund_transaction_id']:null,
-                                'payment_method_id'=>$rma->refund_method=="Wallet"?DataFetcher::getPaymentMethod('wallet'):$wp_order['transactions']['payment_method_id'],
-                                'amount' => abs($rma_total),
-                                'mode' => 'out',
-                                'remarks' => '',
-                                'status' => 'success',
-                            ]);
+                            
+                            $transaction_no=null;
+
+                            if(isset($wp_order['refund_child']['refund_transaction_id'])){
+                                $transaction_no = $wp_order['refund_child']['refund_transaction_id'];
+                            }else{
+                                if($rma->refund_method=="Wallet")
+                                    $transaction_no = $this->walletTransactionFinder($order,abs($rma_total));
+                            }
+
+                            if($rma->status=="Completed"){
+                                $rma->transactions()->create([
+                                    'parent_id' => $rma->id,
+                                    'parent_type' => 'rma',
+                                    'transaction_date'=>$wp_order['rma_exchange_completed_date'],
+                                    'transaction_no' => $transaction_no,
+                                    'payment_method_id'=>$rma->refund_method=="Wallet"?DataFetcher::getPaymentMethod('wallet'):$master_transaction_payment_method_id,
+                                    'amount' => abs($rma_total),
+                                    'mode' => 'out',
+                                    'remarks' => '',
+                                    'status' => 'success',
+                                ]);
+                            }
                         }
 
                         if($rma_total>0){
-                            $exchange_order = $rma->exchange_order;
+                            $exchange_order = Order::find($rma->child_order_id);
                             $paid = 0;
                             if($exchange_order){
                                 foreach($exchange_order->transactions as $transaction){
@@ -705,10 +793,9 @@ class OrderController extends Controller
                                         $paid +=$transaction->amoun;
                                     }
                                 }
-                            }
-
-                            if($exchange_order->grand_total > 0 && $paid==0){
-                                $exchange_order->update(['status'=>'Unpaid']);
+                                if($exchange_order->grand_total > 0 && $paid==0){
+                                    $exchange_order->update(['status'=>'Unpaid']);
+                                }
                             }
                         }
 
@@ -726,6 +813,8 @@ class OrderController extends Controller
     }
 
     private function prepareOrderData(){
+        
+        $id = 0;
 
         $orders = Post::where('post_type','shop_order')
             ->whereDate('post_date','>=',date('Y-m-d',strtotime(request()->start_date)))
@@ -742,181 +831,216 @@ class OrderController extends Controller
                 $q->with('meta');
             }])->get();
 
-        $orders_array = [];
-        foreach($orders as $order){
+        $log_order_id=0;
 
-            $array=[];
-            $order_billing_array =[];
-            $order_shipping_array =[];
+        try{
+            $orders_array = [];
+            foreach($orders as $order){
+                
+                \Log::info("Prepared Order : ".$order['ID']);
 
-            $order_transaction = [];
+                $log_order_id = $order->ID;
+                $array=[];
+                $order_billing_array =[];
+                $order_shipping_array =[];
 
-            $array['id'] = $order->ID;
-            $array['date'] = $order->post_date;
-            $array['created_at'] = $order->post_date;
-            $array['updated_at'] = $order->post_date;
-            $array['is_guest'] = false;
-            $array['channel_id'] = 1;
-            $array['priority'] = 'Normal';
-            $array['platform'] = 'Online';
-            $array['status'] = DataFetcher::getOrderStatus($order->post_status);
-            $array['event_tracked'] = true;
+                $order_transaction = [];
 
-            $refund_child = $this->prepareChildData($order->child);
-            $array['refund_child'] = $refund_child;
+                $array['id'] = $order->ID;
+                $array['date'] = $order->post_date;
+                $array['created_at'] = $order->post_date;
+                $array['updated_at'] = $order->post_date;
+                $array['is_guest'] = false;
+                $array['channel_id'] = 1;
+                $array['priority'] = 'Normal';
+                $array['platform'] = 'Online';
+                $array['status'] = DataFetcher::getOrderStatus($order->post_status);
+                $array['event_tracked'] = true;
 
-            $order_address_array['order_id'] = $order->ID;
+                $refund_child = $this->prepareChildData($order->child);
+                $array['refund_child'] = $refund_child;
 
-            foreach($order->meta as $meta){
-                switch($meta->meta_key){
-                    case "_order_key":$array['token']=$meta->meta_value;break;
-                    case "_customer_user":$array['customer_id']=$meta->meta_value;break;
-                    case "_order_tax":$array['tax_total']=$meta->meta_value;break;
-                    case "_order_total":$array['grand_total']=$meta->meta_value;break;
-                    case "_billing_email" : $array['email'] = $meta->meta_value;break;
-                    case "_billing_phone" : $array['phone'] = $meta->meta_value;break;
-                    case "_order_admin_status" : $array['order_admin_status'] = $meta->meta_value;break;
-                    case "_order_hold_reason" : $array['order_hold_reason'] = $meta->meta_value;break;
-                    case "_order_canceled_reason" : $array['order_cancel_reason'] = $meta->meta_value;break;
-                    case "_order_hold_details" : $array['order_hold_details'] = $meta->meta_value;break;
-                    case "_order_canceled_details" : $array['order_cancel_details'] = $meta->meta_value;break;
-                    case "_invoice_no" : $array['invoice_no'] = $meta->meta_value;break;
+                $order_address_array['order_id'] = $order->ID;
 
-                    case "_billing_first_name" :$order_billing_array['first_name']=$meta->meta_value;break;
-                    case "_billing_last_name" :$order_billing_array['last_name']=$meta->meta_value;break;
-                    case "_billing_address_1" :$order_billing_array['address_1']=$meta->meta_value;break;
-                    case "_billing_address_2" :$order_billing_array['address_2']=$meta->meta_value;break;
-                    case "_billing_city" :$order_billing_array['city']=$meta->meta_value;break;
-                    case "_billing_state" :$order_billing_array['state_id']= DataFetcher::getStateByCode($meta->meta_value)->id;break;
-                    case "_billing_postcode" :$order_billing_array['zip']=$meta->meta_value;break;
+                $array['order_cancel_reason']="";
+                $array['order_hold_reason']="";
+                $array['order_hold_details']="";
+                $array['order_cancel_details']="";
+                $array['rma_exchange_cancel_reason']="";
+                $array['rma_refund_cancel_reason']="";
 
-                    case "_shipping_first_name" :$order_shipping_array['first_name']=$meta->meta_value;break;
-                    case "_shipping_last_name" :$order_shipping_array['last_name']=$meta->meta_value;break;
-                    case "_shipping_address_1" :$order_shipping_array['address_1']=$meta->meta_value;break;
-                    case "_shipping_address_2" :$order_shipping_array['address_2']=$meta->meta_value;break;
-                    case "_shipping_city" :$order_shipping_array['city']=$meta->meta_value;break;
-                    case "_shipping_state" :$order_shipping_array['state_id']= DataFetcher::getStateByCode($meta->meta_value)->id;break;
-                    case "_shipping_postcode" :$order_shipping_array['zip']=$meta->meta_value;break;
-
-                    case "_paid_date" : $order_transaction['transaction_date'] = $meta->meta_value;break;
-                    case "_transaction_id" : $order_transaction['transaction_no'] = $meta->meta_value;break;
-                    case "_payment_method" : $order_transaction['payment_method_id'] = DataFetcher::getPaymentMethod($meta->meta_value);break;
-
-                    case "_order_invoiced_date" : $array['shipment_created_date'] = $meta->meta_value;break;
-                    case "_order_packed_date" : $array['shipment_packed_date'] = $meta->meta_value;break;
-                    case "_order_todespatch_date" : $array['shipment_despatch_date'] = $meta->meta_value;break;
-                    case "_order_shipped_date" : $array['shipment_shipped_date'] = $meta->meta_value;break;
-                    case "_order_rto_date" : $array['shipment_rto_date'] = $meta->meta_value;break;
-                    case "_order_hold_date" : $array['shipment_hold_date'] = $meta->meta_value;break;
-
-                    case '_order_refund_requested_date' : $array['rma_refund_requested_date'] = $meta->meta_value;break;
-                    case '_order_refund_approved_date' : $array['rma_refund_approved_date'] = $meta->meta_value;break;
-                    case '_order_refund_stock_received_date' : $array['rma_refund_processing_date'] = $meta->meta_value;break;
-                    case '_order_refund_processing_date' : $array['rma_refund_processing_date'] = $meta->meta_value;break;
-                    case '_order_refunded_date' : $array['rma_refund_refunded_date'] = $meta->meta_value;break;
-                    case '_order_refund_canceled_date' : $array['rma_refund_cancelled_date'] = $meta->meta_value;break;
-                    case '_order_refund_canceled_details' : $array['rma_refund_cancel_reason'] = $meta->meta_value;break;
-
-                    case '_order_exchange_requested_date' : $array['rma_exchange_requested_date'] = $meta->meta_value;break;
-                    case '_order_exchange_approved_date' : $array['rma_exchange_approved_date'] = $meta->meta_value;break;
-                    case '_order_exchange_stock_received_date' : $array['rma_exchange_processing_date'] = $meta->meta_value;break;
-                    case '_order_exchange_completed' : $array['rma_exchange_completed_date'] = $meta->meta_value;break;
-                    case '_order_exchange_canceled_date' : $array['rma_exchange_cancelled_date'] = $meta->meta_value;break;
-                    case '_order_exchange_canceled_details' : $array['rma_exchange_cancel_reason'] = $meta->meta_value;break;
-
-                    case 'mwb_wrma_exchange_order' : $array['parent_id'] = $meta->meta_value;break;
-                    case "mwb_wrma_return_product" : $array['rma_returns'] = $meta->meta_value;break;
-                    case "mwb_wrma_exchange_product" : $array['rma_exchanges'] = $meta->meta_value;break;
-                    case "mwb_wrma_return_attachment" : $array['rma_attachment'] = $meta->meta_value;break;
-                    case 'new_order_id' : $array['exchange_order_id'] = $meta->meta_value;break;
-
-                }
-            }
-
-            $order_billing_array['country_id']=1;
-            $order_billing_array['address_type']="Billing";
-
-            $order_shipping_array['country_id']=1;
-            $order_shipping_array['phone']=$array['phone'];
-            $order_shipping_array['address_type']="Shipping";
-
-            $order_shipping_array['delivery_type']='Home';
-
-            $line_items = $order->items->where('order_item_type','line_item');
-
-            $fee = $order->items->where('order_item_type','fee');
-
-            $array['items_count'] = $line_items->count();
-            $sub_total = 0;
-            foreach($line_items as $item){
-                foreach($item->meta as $meta){
+                foreach($order->meta as $meta){
                     switch($meta->meta_key){
-                        case '_line_total': $sub_total+=$meta->meta_value;break;
+                        case "_order_key":$array['token']=$meta->meta_value;break;
+                        case "_customer_user":$array['customer_id']=$meta->meta_value;break;
+                        case "_order_tax":$array['tax_total']=$meta->meta_value;break;
+                        case "_order_total":
+                            $array['grand_total'] = preg_match('#^(?!0[1-9])\d*\.?(?!\.)\d+$#', $meta->meta_value)?$meta->meta_value:0;
+                            break;
+                        case "_billing_email" : $array['email'] = $meta->meta_value;break;
+                        case "_billing_phone" : $array['phone'] = $meta->meta_value;break;
+                        case "_order_admin_status" : $array['order_admin_status'] = $meta->meta_value;break;
+                        case "_order_hold_reason" : $array['order_hold_reason'] = $meta->meta_value;break;
+                        case "_order_canceled_reason" : $array['order_cancel_reason'] = $meta->meta_value;break;
+                        case "_order_hold_details" : $array['order_hold_details'] = $meta->meta_value;break;
+                        case "_order_canceled_details" : $array['order_cancel_details'] = $meta->meta_value;break;
+                        case "_invoice_no" : $array['invoice_no'] = $meta->meta_value;break;
+
+                        case "_billing_first_name" :$order_billing_array['first_name']=$meta->meta_value;break;
+                        case "_billing_last_name" :$order_billing_array['last_name']=$meta->meta_value;break;
+                        case "_billing_address_1" :$order_billing_array['address_1']=$meta->meta_value;break;
+                        case "_billing_address_2" :$order_billing_array['address_2']=$meta->meta_value;break;
+                        case "_billing_city" :$order_billing_array['city']=$meta->meta_value;break;
+                        case "_billing_state" :$order_billing_array['state_id']= DataFetcher::getStateByCode($meta->meta_value)->id;break;
+                        case "_billing_postcode" :$order_billing_array['zip']=$meta->meta_value;break;
+
+                        case "_shipping_first_name" :$order_shipping_array['first_name']=$meta->meta_value;break;
+                        case "_shipping_last_name" :$order_shipping_array['last_name']=$meta->meta_value;break;
+                        case "_shipping_address_1" :$order_shipping_array['address_1']=$meta->meta_value;break;
+                        case "_shipping_address_2" :$order_shipping_array['address_2']=$meta->meta_value;break;
+                        case "_shipping_city" :$order_shipping_array['city']=$meta->meta_value;break;
+                        case "_shipping_state" :$order_shipping_array['state_id']= DataFetcher::getStateByCode($meta->meta_value)->id;break;
+                        case "_shipping_postcode" :$order_shipping_array['zip']=$meta->meta_value;break;
+
+                        case "_paid_date" : $order_transaction['transaction_date'] = $meta->meta_value;break;
+                        case "_transaction_id" : $order_transaction['transaction_no'] = $meta->meta_value;break;
+                        case "_payment_method" : $order_transaction['payment_method_id'] = DataFetcher::getPaymentMethod($meta->meta_value);break;
+
+                        case "_order_invoiced_date" : $array['shipment_created_date'] = $meta->meta_value;break;
+                        case "_order_packed_date" : $array['shipment_packed_date'] = $meta->meta_value;break;
+                        case "_order_todespatch_date" : $array['shipment_despatch_date'] = $meta->meta_value;break;
+                        case "_order_shipped_date" : $array['shipment_shipped_date'] = $meta->meta_value;break;
+                        case "_order_rto_date" : $array['shipment_rto_date'] = $meta->meta_value;break;
+                        case "_order_hold_date" : $array['shipment_hold_date'] = $meta->meta_value;break;
+
+                        case '_order_refund_requested_date' : $array['rma_refund_requested_date'] = $meta->meta_value;break;
+                        case '_order_refund_approved_date' : $array['rma_refund_approved_date'] = $meta->meta_value;break;
+                        case '_order_refund_stock_received_date' : $array['rma_refund_processing_date'] = $meta->meta_value;break;
+                        case '_order_refund_processing_date' : $array['rma_refund_processing_date'] = $meta->meta_value;break;
+                        case '_order_refunded_date' : $array['rma_refund_refunded_date'] = $meta->meta_value;break;
+                        case '_order_refunded_partially_date' : $array['rma_refund_refunded_date'] = $meta->meta_value;break;
+                        case '_order_refund_canceled_date' : $array['rma_refund_cancelled_date'] = $meta->meta_value;break;
+                        case '_order_refund_canceled_details' : $array['rma_refund_cancel_reason'] = $meta->meta_value;break;
+
+                        case '_order_exchange_requested_date' : $array['rma_exchange_requested_date'] = $meta->meta_value;break;
+                        case '_order_exchange_approved_date' : $array['rma_exchange_approved_date'] = $meta->meta_value;break;
+                        case '_order_exchange_stock_received_date' : $array['rma_exchange_processing_date'] = $meta->meta_value;break;
+                        case '_order_exchange_completed_date' : $array['rma_exchange_completed_date'] = $meta->meta_value;break;
+                        case '_order_exchange_canceled_date' : $array['rma_exchange_cancelled_date'] = $meta->meta_value;break;
+                        case '_order_exchange_canceled_details' : $array['rma_exchange_cancel_reason'] = $meta->meta_value;break;
+
+                        case 'mwb_wrma_exchange_order' : $array['parent_id'] = $meta->meta_value;break;
+                        case "mwb_wrma_return_product" : $array['rma_returns'] = $meta->meta_value;break;
+                        case "mwb_wrma_exchange_product" : $array['rma_exchanges'] = $meta->meta_value;break;
+                        case "mwb_wrma_return_attachment" : $array['rma_attachment'] = $meta->meta_value;break;
+                        case 'new_order_id' : $array['exchange_order_id'] = $meta->meta_value;break;
+
                     }
                 }
-            }
-            $array['sub_total'] = $sub_total;
 
-            $order_transaction['parent_id'] = $array['id'];
-            $order_transaction['parent_type'] = 'order';
-            $order_transaction['amount'] = $array['grand_total'];
-            $order_transaction['mode'] = "in";
-            $order_transaction['isPrimary'] = true;
+                $start= microtime(true);
 
-            $order_products = $this->prepareOrderProducts($line_items,$array);
-            $addons = $this->prepareOrderAddons($fee,$array);
-            $discounts = $this->prepareOrderDiscounts($fee,$array,$order_products[0]['tax_percentage']);
+                $order_billing_array['country_id']=1;
+                $order_billing_array['address_type']="Billing";
 
-            $wallet_transaction = $this->prepareSecondaryOrderTrasanction($fee,$array);
+                $order_shipping_array['country_id']=1;
+                $order_shipping_array['phone']=$array['phone'];
+                $order_shipping_array['address_type']="Shipping";
 
-            $array['products'] = $order_products;
-            $array['addons'] = $addons;
-            $array['transactions'] = $order_transaction;
-            $array['billing_address']  = $order_billing_array;
-            $array['shipping_address']  = $order_shipping_array;
-            $array['wallet_transaction'] = $wallet_transaction;
-            $array['discounts'] = $discounts;
+                $order_shipping_array['delivery_type']='Home';
 
-            $array['products'] = $this->updateOrderItemDiscounts($array['products'],$array['discounts']);
+                $line_items = $order->items->where('order_item_type','line_item');
 
-            $array['discount_amount'] = array_sum(array_column($discounts,'amount'));
+                $fee = $order->items->where('order_item_type','fee');
 
-            $history = [];
-            foreach($order->comments as $comment){
-                $type='note';
-                $platform="";
-                $user_id = 1;
-                foreach($comment->meta as $meta){
-                    if($meta->meta_key=="order_note_type" && $meta->meta_value=="communication"){
-                        $type='communication';
-                    }else if($meta->meta_key=="order_note_type" && $meta->meta_value=="history"){
-                        $type='history';
-                    }
-                    if($meta->meta_key=="order_communication_platform"){
-                        $platform= $meta->meta_value;
-                    }
-                    if($meta->meta_key=="note_user"){
-                        $user_id= $meta->meta_value;
+                $array['items_count'] = $line_items->count();
+                $sub_total = 0;
+                foreach($line_items as $item){
+                    foreach($item->meta as $meta){
+                        switch($meta->meta_key){
+                            case '_line_total': $sub_total+=$meta->meta_value;break;
+                        }
                     }
                 }
-                $order_comment = [
-                    'order_id' => $order->ID,
-                    'type' => $type,
-                    'note' => $comment->comment_content,
-                    'date' => $comment->comment_date,
-                    'created_by' => $user_id,
-                    'platform' => $platform
-                ];
-                array_push($history,$order_comment);
+                $array['sub_total'] = $sub_total;
+
+                $order_transaction['parent_id'] = $array['id'];
+                $order_transaction['parent_type'] = 'order';
+                $order_transaction['amount'] = $array['grand_total'];
+                $order_transaction['mode'] = "in";
+                $order_transaction['isPrimary'] = true;
+
+
+                $array['billing_address']  = $order_billing_array;
+                $array['shipping_address']  = $order_shipping_array;
+
+                $order_products = $this->prepareOrderProducts($line_items,$array);
+
+                $addons = $this->prepareOrderAddons($fee,$array);
+
+                
+                $discounts = $this->prepareOrderDiscounts($fee,$array,$order_products[0]['tax_percentage']);
+
+                $wallet_transaction = $this->prepareSecondaryOrderTrasanction($fee,$array);
+
+                $array['products'] = $order_products;
+                $array['addons'] = $addons;
+                $array['transactions'] = $order_transaction;
+                $array['wallet_transaction'] = $wallet_transaction;
+                $array['discounts'] = $discounts;
+
+                $array['products'] = $this->updateOrderItemDiscounts($array['products'],$array['discounts']);
+
+                $array['discount_amount'] = array_sum(array_column($discounts,'amount'));
+
+                $history = [];
+                foreach($order->comments as $comment){
+                    $type='note';
+                    $platform="";
+                    $user_id = 1;
+                    foreach($comment->meta as $meta){
+                        if($meta->meta_key=="order_note_type" && $meta->meta_value=="communication"){
+                            $type='communication';
+                        }else if($meta->meta_key=="order_note_type" && $meta->meta_value=="history"){
+                            $type='history';
+                        }
+                        if($meta->meta_key=="order_communication_platform"){
+                            $platform= $meta->meta_value;
+                        }
+                        if($meta->meta_key=="note_user"){
+                            $user_id = DataFetcher::getWooAdminUser($meta->meta_value);
+                        }
+                    }
+                    $order_comment = [
+                        'order_id' => $order->ID,
+                        'type' => $type,
+                        'note' => $comment->comment_content,
+                        'date' => $comment->comment_date,
+                        'created_by' => $user_id,
+                        'platform' => ucfirst($platform)
+                    ];
+                    array_push($history,$order_comment);
+                }
+
+                $array['comments'] = $history;
+
+                //WP_COURIER_TRACKING
+                $array['wp_courier_tracking'] = WpCourierTracking::where('order_id', $order->ID)->first();
+                //WP_COURIER_REVERSE_TRACKING
+                $array['wp_courier_reverse_tracking'] = WpCourierReverseTracking::where('order_id', $order->ID)->first();
+                //Secondary
+                $array['wp_secondary_courier_trackings'] = WpSecondaryCourierTracking::where('order_id', $order->ID)->get();
+                //secondary reverse
+                $array['wp_secondary_courier_reverse_trackings'] = WpSecondaryCourierReverseTracking::where('order_id', $order->id)->get();
+                
+                array_push($orders_array,$array);
             }
 
-            $array['comments'] = $history;
+            return $orders_array;
 
-            array_push($orders_array,$array);
+        }catch(Exception $ex){
+            dd($log_order_id.$ex);
         }
-
-        return $orders_array;
-
     }
 
     private function prepareOrderProducts($line_items,$order){
@@ -935,18 +1059,20 @@ class OrderController extends Controller
                     case '_line_tax_data' : $item_array['tax_data'] = $meta->meta_value;break;
                 }
             }
-            $item_array['price'] = ($item_array['tax_amount'] + $item_array['taxable_amount'])/ $item_array['quantity'] ;
-            $item_array['total'] = $item_array['price'] * $item_array['quantity'];
-            $item_array['type']  = 'product';
-            $item_array['created_at'] = $order['created_at'];
-            $item_array['updated_at'] = $order['updated_at'];
-            array_push($items, $item_array);
+            if($item_array['quantity']>0 && $item->order_item_name != 'Wallet Topup'){
+                $item_array['price'] = ($item_array['tax_amount'] + $item_array['taxable_amount'])/ $item_array['quantity'] ;
+                $item_array['total'] = $item_array['price'] * $item_array['quantity'];
+                $item_array['type']  = 'product';
+                $item_array['created_at'] = $order['created_at'];
+                $item_array['updated_at'] = $order['updated_at'];
+                array_push($items, $item_array);
+            }
         }
         return $items;
     }
 
     private function prepareOrderAddons($items,$order){
-        $items =[];
+        $_items =[];
         foreach($items as $item){
             if($item->order_item_name!="Via wallet" && $item->order_item_name!="Discount" ){
                 $item_array=[];
@@ -959,17 +1085,17 @@ class OrderController extends Controller
                         case '_tax_class' : $item_array['tax_percentage']=DataFetcher::getTaxPercentage($meta->meta_value,$order['shipping_address']['state_id'],$order['date']);break;
                     }
                 }
-                $item_array['_product_id'] = 1;
+                $item_array['product_id'] = 1;
                 $item_array['quantity']=1;
                 $item_array['price'] = ($item_array['tax_amount'] + $item_array['taxable_amount'])/ $item_array['quantity'];
                 $item_array['total'] = $item_array['price'] * $item_array['quantity'];
                 $item_array['type']  = 'add_on_item';
                 $item_array['created_at'] = $order['created_at'];
                 $item_array['updated_at'] = $order['updated_at'];
-                array_push($items, $item_array);
+                array_push($_items, $item_array);
             }
         }
-        return $items;
+        return $_items;
     }
 
     public function prepareSecondaryOrderTrasanction($items,$order){
@@ -995,10 +1121,9 @@ class OrderController extends Controller
     }
 
     public function walletTransactionFinder($order,$amount){
-        $wallet = Wallet::where('remarks','like ','%'.$order['id'].'%')
-            ->where('customer_id',$order['customer'])
+        $wallet = Wallet::where('remarks','like','%'.$order['id'].'%')
+            ->where('customer_id',$order['customer_id'])
             ->where('amount',$amount)
-            ->where('type','Debit')
             ->first();
 
         if($wallet){
@@ -1016,11 +1141,12 @@ class OrderController extends Controller
                 foreach($item->meta as $meta){
                     switch($meta->meta_key){
                         case '_line_total' : $discount['discount_value']= abs($meta->meta_value);break;
+                        case '_line_tax' : $discount['discount_tax']= abs($meta->meta_value);break;
                     }
                 }
                 $discount['order'] = $order['id'];
                 $discount['type'] = "Fixed Whole Cart";
-                $discount['amount'] = $discount['discount_value'];
+                $discount['amount'] = $discount['discount_value'] + $discount['discount_tax'];
                 $discount['taxable_discount_amount'] = $discount['amount']/(($tax_percentage/100)+1);
                 $discount['parent_id'] = null;
                 $discount['parent_type'] = 'other';
@@ -1092,10 +1218,12 @@ class OrderController extends Controller
     }
 
     public function findMasterOrderId($parent_id,$depth){
+        $result = ['master_order_id'=>$parent_id,'depth'=>$depth];
         $order = Post::where('ID',$parent_id)
                 ->with(['meta'=>function($q){
                     $q->where('meta_key','mwb_wrma_exchange_order');
                 }])->first();
+                
 
         $_parent_id=null;
         foreach($order->meta as $meta){
@@ -1105,17 +1233,20 @@ class OrderController extends Controller
         }
         if($_parent_id){
             $depth++;
-            $this->findMasterOrderId($_parent_id,$depth);
+            $result = $this->findMasterOrderId($_parent_id,$depth);
         }
-        return ['master_order_id'=>$parent_id,'depth'=>$depth];
+
+        return  $result;
     }
 
     public function prepareChildData($childrens){
         $data = [];
-        foreach($childrens[0]->meta as $meta){
-            switch($meta->meta_key){
-                case "_refund_method":$data['refund_method'] = $meta->meta_value=="Mannual"?"Bank Transfer":"Wallet" ; break;
-                case "_refund_transaction_id":$data['refund_transaction_id'] = $meta->meta_value; break;
+        if(count($childrens)>0){
+            foreach($childrens[0]->meta as $meta){
+                switch($meta->meta_key){
+                    case "_refund_method":$data['refund_method'] = $meta->meta_value=="Mannual"?"Bank Transfer":"Wallet" ; break;
+                    case "_refund_transaction_id":$data['refund_transaction_id'] = $meta->meta_value; break;
+                }
             }
         }
         return $data;
@@ -1204,6 +1335,56 @@ class OrderController extends Controller
                 'created_by' => 1
             ]);
         }
+    }
+
+    public function prepareMasterOrderFromWp($order_id){
+
+        $order = Post::where('post_type','shop_order')
+            ->orderBy('post_date')
+            ->with('meta')->find($order_id);
+        
+        $log_order_id=0;
+
+        $array = [];
+
+        $log_order_id = $order->ID;
+        $array=[];
+        $order_billing_array =[];
+        $order_shipping_array =[];
+
+        $order_transaction = [];
+
+        $array['id'] = $order->ID;
+        $array['date'] = $order->post_date;
+        $array['created_at'] = $order->post_date;
+        $array['updated_at'] = $order->post_date;
+        $array['is_guest'] = false;
+        $array['channel_id'] = 1;
+        $array['priority'] = 'Normal';
+        $array['platform'] = 'Online';
+        $array['status'] = DataFetcher::getOrderStatus($order->post_status);
+        $array['event_tracked'] = true;
+
+        foreach($order->meta as $meta){
+            switch($meta->meta_key){
+                case "_paid_date" : $order_transaction['transaction_date'] = $meta->meta_value;break;
+                case "_transaction_id" : $order_transaction['transaction_no'] = $meta->meta_value;break;
+                case "_payment_method" : $order_transaction['payment_method_id'] = DataFetcher::getPaymentMethod($meta->meta_value);break;
+                case "_order_total":$array['grand_total']=$meta->meta_value;break;
+            }
+        }
+
+       
+
+        $order_transaction['parent_id'] = $array['id'];
+        $order_transaction['parent_type'] = 'order';
+        $order_transaction['amount'] = $array['grand_total'];
+        $order_transaction['mode'] = "in";
+        $order_transaction['isPrimary'] = true;
+
+        $array['transaction'] = $order_transaction;
+
+        return $array;
 
     }
 }

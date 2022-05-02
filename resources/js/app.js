@@ -18,3 +18,10 @@ createInertiaApp({
 });
 
 InertiaProgress.init({ color: '#4B5563' });
+// const app = createApp({});
+
+// app.component("dashboard", require("./Pages/Dashboard.vue").default);
+
+
+
+// app.mount("#app");

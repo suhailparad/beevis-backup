@@ -11,7 +11,7 @@ const props = defineProps({
 
 const form = useForm({
     limit: 10000,
-    offset: 10000,
+    offset: 0,
 });
 
 

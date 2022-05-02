@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Product;
 use App\Models\State;
+use App\Models\User;
 use Carbon\Carbon;
 
 class DataFetcher{
@@ -32,7 +33,8 @@ class DataFetcher{
             'razorpay' => 4,
             'payg' => 5,
             'wallet' => 6,
-            'wallet_gateway' => 6
+            'wallet_gateway' => 6,
+            'other' => 3
         };
 
     }
@@ -70,11 +72,12 @@ class DataFetcher{
     public function getTaxPercentage($tax_class,$state_id,$date){
 
         if(empty($tax_class)){
-
-            $order_date = Carbon::createFromFormat('Y-m-d',$date);
-
+            $order_date = date('Y-m-d', strtotime($date));
+            $order_date = Carbon::createFromFormat('Y-m-d',$order_date);
+            
+            
             $kfc_end_date = Carbon::createFromFormat('Y-m-d','2021-08-01');
-
+           
             $has_kfc = $order_date->lt($kfc_end_date);
 
             if($has_kfc && $state_id==18)
@@ -112,8 +115,42 @@ class DataFetcher{
         return match($type){
             'Damaged Product' => 'Damaged Product',
             'Size Issue' => 'Size Issue',
-            'Different Color' => 'Colour Issue'
+            'Different Color' => 'Colour Issue',
+            default => $type
         };
+    }
+
+    public function getWooAdminUser($id){
+        $admin_id = null;
+        $wp_admin=[
+            1   =>  'customercare@happenstance.com',
+            2	=>	'rijumosons@gmail.com',
+            3	=>	'ratheesh@happenstance.com',
+            4	=>	'zerlim@mosonsgroup.in.com',
+            5	=>	'nived@happenstance.com',
+            6	=> 	'hafeel@happenstance.com',
+            7	=>	'yadu@happenstance.com',
+            8	=>	'sabina@happenstance.com',
+            9	=>	'sneha@happenstance.com',
+            10	=> 	'daniel@happenstance.com',
+            11	=>	'sruthi@happenstance.com',
+            12	=>	'amaljith@happenstance.com',
+            13	=>	'anshif@happenstance.com',
+            14	=>	'naseefmohammed9@gmail.com',
+            15	=>	'adarsh@happenstance.com',
+            16	=>	'amal@happenstance.com',
+            17	=>	'aswin@happenstance.com',
+            18	=>	'arshak@gmail.com',
+            19	=>	'Anjay@myemail.com'
+        ];
+
+        if(isset($wp_admin[$id])){
+            $user = User::where('email',$wp_admin[$id])->first();
+            if($user){
+                $admin_id = $user->id;
+            }
+        }
+        return $admin_id;
     }
 
 }

@@ -51,6 +51,9 @@ const showingNavigationDropdown = ref(false);
                                 <BreezeNavLink :href="route('orders')" :active="route().current('orders')">
                                     Orders
                                 </BreezeNavLink>
+                                <BreezeNavLink :href="route('rma.transactions')" :active="route().current('rma.transactions')">
+                                    RMA Transactions
+                                </BreezeNavLink>
                             </div>
                         </div>
 

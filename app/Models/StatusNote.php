@@ -8,6 +8,6 @@ use Illuminate\Database\Eloquent\Model;
 class StatusNote extends Model
 {
     use HasFactory;
-    protected $connection= 'platoshop_mysql';
+    // protected $connection= 'platoshop_mysql';
     protected $guarded = [];
 }

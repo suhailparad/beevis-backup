@@ -7,9 +7,10 @@ use Modules\Support\Money;
 
 class OrderRefund extends Model
 {
-    protected $connection= 'platoshop_mysql';
+    // protected $connection= 'platoshop_mysql';
 
-    protected $fillable = ['order_id','user_id','comment','sub_total','grand_total','status','rma_request_id'];
+    // protected $fillable = ['order_id','user_id','comment','sub_total','grand_total','status','rma_request_id'];
+    protected $guarded = [];
 
     protected $appends=[
         'formatted_sub_total',
@@ -36,7 +37,7 @@ class OrderRefund extends Model
 
     public function save(array $options = array())
     {
-        $this->user_id = auth()->id();
+        // $this->user_id = auth()->id();
         parent::save($options);
     }
 

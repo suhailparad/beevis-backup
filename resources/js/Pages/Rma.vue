@@ -3,30 +3,38 @@ import BreezeAuthenticatedLayout from '@/Layouts/Authenticated.vue';
 import { Head,useForm } from '@inertiajs/inertia-vue3';
 import BreezeButton from '@/Components/Button.vue';
 import BreezeInput from '@/Components/Input.vue';
-import { ref,onMounted } from 'vue';
-
+import { onMounted , ref} from 'vue';
+import moment from 'moment';
 const props = defineProps({
     flash: Object,
 });
 
 const form = useForm({
-    // limit: 10000,
-    // offset: 10000,
+    start_date: '2021-04-01',
+    end_date: '2021-04-01'
 });
+const index = ref(0);
+const result = ref(null);
 
 const submit = () => {
-    form.post(route('migrate.product.linking'), {
-        onFinish: () => {
-            // form.offset+=form.limit;
-        }
-    });
-};
-
-const submit2 = () => {
-    form.post(route('migrate.product.channel-create'), {
-        onFinish: () => {
-            // form.offset+=form.limit;
-        }
+    result.value=null;
+    form.post(route('migrate.orders'), {
+        onSuccess: (data) => {
+            console.log(data);
+            result.value = data.props.flash.success;
+        },
+         onFinish: () => {
+            form.start_date = moment(form.start_date).add(1, 'days').format('YYYY-MM-DD');
+            form.end_date =  form.start_date;
+            index.value+=1;
+            if(index.value<10 && result.value){
+               submit();
+            }
+            else {
+               index.value=0; 
+               result.value=null;
+           }
+         }
     });
 };
 
@@ -38,7 +46,7 @@ const submit2 = () => {
     <BreezeAuthenticatedLayout>
         <template #header>
             <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-                Products
+                Rma Transactions
             </h2>
         </template>
 
@@ -46,15 +54,20 @@ const submit2 = () => {
             <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
                 <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                     <div class="p-6 bg-white border-b border-gray-200">
-                        <h5 class="mb-5">Platoshop Migration Tool!</h5>
+                        <h5 class="mb-5">Rma Transaction Migration Tool!</h5>
 
                         <div class="flex">
                             <div>
+                                From :
+                                <BreezeInput id="email" type="date" class="inline-block " v-model="form.start_date" required  />
+                            </div>
+                            <div class="ml-4">
+                                To :
+                                <BreezeInput id="email" type="date" class="inline-block" v-model="form.end_date" required />
+                            </div>
+                            <div>
                                 <BreezeButton @click="submit" class="ml-4 h-[40px]" :class="{ 'opacity-25': form.processing }" :disabled="form.processing">
-                                    Start Linking
-                                </BreezeButton>
-                                <BreezeButton @click="submit2" class="ml-4 h-[40px]" :class="{ 'opacity-25': form.processing }" :disabled="form.processing">
-                                    Create Product Channels
+                                    Start Migration
                                 </BreezeButton>
                             </div>
                         </div>
@@ -71,7 +84,7 @@ const submit2 = () => {
                                     Migrating, Please wait...</span>
                             </template>
 
-                            <template v-if="flash.success && !form.processing">
+                           <template v-if="flash.success && !form.processing">
                                 <span class="text-green-600">{{flash.success}}</span>
                             </template>
                             <template v-if="flash.error && !form.processing">

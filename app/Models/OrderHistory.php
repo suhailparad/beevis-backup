@@ -9,7 +9,7 @@ use Modules\User\Entities\User;
 class OrderHistory extends Model
 {
 
-    protected $connection= 'platoshop_mysql';
+    // protected $connection= 'platoshop_mysql';
 
     protected $guarded = [];
 

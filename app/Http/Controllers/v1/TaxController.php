@@ -9,6 +9,7 @@ use App\Models\WpWocommerceTaxRate;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Config;
 
 class TaxController extends Controller
 {
@@ -17,11 +18,17 @@ class TaxController extends Controller
     public function linking(){
 
         $id=0;
+
+        $wp_tax_rates = WpWocommerceTaxRate::get();
+
+        Config::set('database.connections.mysql', Config::get('database.connections.platoshop_mysql'));
+        DB::purge('mysql');
+        DB::reconnect('mysql');
+
         DB::beginTransaction();
         try{
 
-            foreach(WpWocommerceTaxRate::get() as $wp_rates){
-
+            foreach($wp_tax_rates as $wp_rates){
                 $state_id = DataFetcher::getStateByCode($wp_rates->tax_rate_state)->id;
 
                 $tax_class = null;

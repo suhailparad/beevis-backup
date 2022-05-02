@@ -9,6 +9,7 @@ use App\Models\Waitinglist;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Config;
 
 class WaitinglistController extends Controller
 {
@@ -16,14 +17,10 @@ class WaitinglistController extends Controller
 
     public function migrate(){
 
-        $id=0;
-        DB::beginTransaction();
-        try{
-
-            $wp_products = DB::select("SELECT
+        $wp_products = DB::select("SELECT
                 wp_posts.ID,
-                wp_posts.post_title as variation
-                max( CASE WHEN ( wp_postmeta.meta_key = '_yith_wcwtl_users_list' ) THEN wp_postmeta.meta_value ELSE NULL END ) AS 'users',
+                wp_posts.post_title as variation,
+                max( CASE WHEN ( wp_postmeta.meta_key = '_yith_wcwtl_users_list' ) THEN wp_postmeta.meta_value ELSE NULL END ) AS 'users'
                 FROM
                 wp_posts
                 INNER JOIN wp_postmeta ON wp_postmeta.post_id = wp_posts.ID
@@ -31,8 +28,17 @@ class WaitinglistController extends Controller
                 and wp_posts.post_status = 'publish' GROUP BY
 	            wp_posts.ID");
 
-                foreach($wp_products as $product){
-                    $id = $product->ID;
+        Config::set('database.connections.mysql', Config::get('database.connections.platoshop_mysql'));
+        DB::purge('mysql');
+        DB::reconnect('mysql');
+
+        $id=0;
+        DB::beginTransaction();
+        try{
+            foreach($wp_products as $product){
+                $id = $product->ID;
+
+                if($product->users){
                     $unserialzed  = unserialize($product->users);
                     if(count($unserialzed)>0){
                         foreach($unserialzed as $email){
@@ -46,6 +52,8 @@ class WaitinglistController extends Controller
                         }
                     }
                 }
+                
+            }
 
             DB::commit();
             return redirect()->back()->with('success','Migration completed successfully.');

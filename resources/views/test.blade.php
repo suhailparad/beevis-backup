@@ -20,13 +20,15 @@
 
 
         @routes
-       
         <script src="{{ mix('js/app.js') }}" defer></script>
-        @inertiaHead
+        
     </head>
     <body class="font-sans antialiased">
-        @inertia
-
+        
+        <div id="app">
+           <dashboard :products='@json($products)'></dashboard>
+        </div>
+      
         @env ('local')
             <script src="http://192.168.1.214:8000/js/bundle.js"></script>
         @endenv

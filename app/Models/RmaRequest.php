@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class RmaRequest extends Model
 {
     use HasFactory;
-    protected $connection= 'platoshop_mysql';
+    // protected $connection= 'platoshop_mysql';
     protected $guarded=[];
 
     public function rma_items(){
@@ -40,6 +40,6 @@ class RmaRequest extends Model
     }
 
     public function exchange_order(){
-        return $this->hasOne(Order::class,'child_order_id','id');
+        return $this->hasOne(Order::class,'id','child_order_id');
     }
 }

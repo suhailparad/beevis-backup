@@ -8,6 +8,7 @@ use App\Services\DataFetcher;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Config;
 
 class UserController extends Controller
 {
@@ -44,13 +45,18 @@ class UserController extends Controller
         GROUP BY
             wp_users.ID LIMIT ".request('offset').", ".request('limit'));
         $id=0;
+
+        Config::set('database.connections.mysql', Config::get('database.connections.platoshop_mysql'));
+        DB::purge('mysql');
+        DB::reconnect('mysql');
+
         DB::beginTransaction();
 
         try{
 
             foreach($res as $result){
                 $id = $result->ID;
-                $user = DB::connection('platoshop_mysql')->table('users')->insert(
+                $user = DB::table('users')->insert(
                     array(
                         'id'     =>   $result->ID,
                         'first_name'   =>   $result->billing_first_name,
@@ -64,14 +70,14 @@ class UserController extends Controller
                     )
                );
 
-               $role = DB::connection('platoshop_mysql')->table('role_users')->insert([
+               $role = DB::table('role_users')->insert([
                    'user_id' => $result->ID,
                    'role_id' => 2,
                    'created_at' => $result->user_registered
                ]);
 
                if($result->billing_address_1 && $result->billing_postcode){
-                    $address = DB::connection('platoshop_mysql')->table('addresses')->insert([
+                    $address = DB::table('addresses')->insert([
                         'customer_id' => $result->ID,
                         'first_name'   =>   $result->billing_first_name,
                         'last_name'   =>   $result->billing_last_name,
@@ -88,7 +94,7 @@ class UserController extends Controller
                }
 
                //Activation
-               $activation = DB::connection('platoshop_mysql')->table('activations')->insert([
+               $activation = DB::table('activations')->insert([
                    'user_id' => $result->ID,
                    'code' => md5($result->ID),
                    'completed'=>1,

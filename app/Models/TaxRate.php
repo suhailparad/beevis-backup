@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class TaxRate extends Model
 {
-    protected $connection= 'platoshop_mysql';
+    // protected $connection= 'platoshop_mysql';
     protected $guarded=[];
     use HasFactory;
 }

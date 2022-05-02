@@ -2,6 +2,7 @@
 
 namespace App\Facades;
 
+use App\Services\DataFetcher as ServicesDataFetcher;
 use Illuminate\Support\Facades\Facade;
 
 class DataFetcher extends Facade{
@@ -13,8 +14,7 @@ class DataFetcher extends Facade{
      */
     protected static function getFacadeAccessor()
     {
-        // CartService::init();
-        return App\Services\DataFetcher::class;
+        return ServicesDataFetcher::class;
     }
 
 }
