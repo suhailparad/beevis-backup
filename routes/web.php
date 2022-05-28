@@ -10,6 +10,7 @@ use App\Http\Controllers\v1\UserController;
 use App\Http\Controllers\v1\WaitinglistController;
 use App\Http\Controllers\v1\WalletController;
 use App\Http\Controllers\v1\WishlistController;
+use App\Http\Controllers\v1\StockUpdateController;
 use App\Models\Post;
 use App\Models\Product;
 use App\Models\User;
@@ -82,6 +83,10 @@ Route::middleware(['auth', 'verified'])->group(function(){
         return Inertia::render('Rma');
     })->name('rma.transactions');
 
+    Route::get('/stock-update',function(){
+        return Inertia::render('StockUpdate');
+    })->name('stock.update');
+
     Route::post('/migrate',[MigrateController::class,'migrate'])->name('dashboard.migrate');
     Route::post('/migrate/users',[UserController::class,'migrateUser'])->name('migrate.users');
     Route::post('/migrate/wallets',[WalletController::class,'migrateWallet'])->name('migrate.wallets');
@@ -92,6 +97,7 @@ Route::middleware(['auth', 'verified'])->group(function(){
     Route::post('/migrate/wishlist',[WishlistController::class,'migrate'])->name('migrate.wishlist');
     Route::post('/migrate/orders',[OrderController::class,'migrate'])->name('migrate.orders');
     Route::post('/migrate/rma-transaction',[RmaController::class,'migrate'])->name('migrate.transaction.migrate');
+    Route::get('/migrate/stock-update',[StockUpdateController::class,'update'])->name('migrate.stock.update');
 
 });
 
