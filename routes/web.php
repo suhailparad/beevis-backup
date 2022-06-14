@@ -87,6 +87,10 @@ Route::middleware(['auth', 'verified'])->group(function(){
         return Inertia::render('StockUpdate');
     })->name('stock.update');
 
+    Route::get('/use-phone-migrate',function(){
+        return Inertia::render('UserPhone');
+    })->name('user.phone');
+
     Route::post('/migrate',[MigrateController::class,'migrate'])->name('dashboard.migrate');
     Route::post('/migrate/users',[UserController::class,'migrateUser'])->name('migrate.users');
     Route::post('/migrate/wallets',[WalletController::class,'migrateWallet'])->name('migrate.wallets');
@@ -98,6 +102,7 @@ Route::middleware(['auth', 'verified'])->group(function(){
     Route::post('/migrate/orders',[OrderController::class,'migrate'])->name('migrate.orders');
     Route::post('/migrate/rma-transaction',[RmaController::class,'migrate'])->name('migrate.transaction.migrate');
     Route::get('/migrate/stock-update',[StockUpdateController::class,'update'])->name('migrate.stock.update');
+    Route::post('/migrate/users/phone',[UserController::class,'migrateUserPhone'])->name('user.phone.migrate');
 
 });
 
