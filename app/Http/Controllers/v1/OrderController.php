@@ -815,7 +815,7 @@ class OrderController extends Controller
     private function prepareOrderData(){
         
         $id = 0;
-
+        \Log::info("Prepared Order");
         $orders = Post::where('post_type','shop_order')
             ->whereDate('post_date','>=',date('Y-m-d',strtotime(request()->start_date)))
             ->whereDate('post_date','<=',date('Y-m-d',strtotime(request()->end_date)))
@@ -830,6 +830,7 @@ class OrderController extends Controller
             }])->with(['child'=>function($q){
                 $q->with('meta');
             }])->get();
+            \Log::info("Prepared Order 1");
 
         $log_order_id=0;
 
