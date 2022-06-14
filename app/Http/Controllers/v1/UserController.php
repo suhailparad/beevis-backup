@@ -4,6 +4,8 @@ namespace App\Http\Controllers\v1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Address;
+use App\Models\Post;
+use App\Models\User;
 use App\Services\DataFetcher;
 use Exception;
 use Illuminate\Http\Request;
@@ -109,5 +111,49 @@ class UserController extends Controller
             DB::rollBack();
             return  $id.$ex;
         }
+    }
+    public function migrateUserPhone(){
+
+        $id = 0;
+
+        $orders = Post::where('post_type','shop_order')
+            ->whereDate('post_date','>=',date('Y-m-d',strtotime(request()->start_date)))
+            ->whereDate('post_date','<=',date('Y-m-d',strtotime(request()->end_date)))
+            ->orderBy('post_date')
+            ->with('meta')
+            ->whereHas('items',function($q){
+                $q->where('order_item_name','!=','Wallet Topup');
+            })->get();
+
+            DB::beginTransaction();
+            try{
+                foreach($orders as $order){
+                    $id=$order->ID;
+                    $array=[];
+                    foreach($order->meta as $meta){
+                        switch($meta->meta_key){
+                            case "_billing_email" : $array['email'] = $meta->meta_value;break;
+                            case "_billing_phone" : $array['phone'] = $meta->meta_value;break;
+                            case "_customer_user":$array['customer_id']=$meta->meta_value;break;
+                        }
+                    }
+                    if(isset($array['customer_id']) && isset($array['phone'])){
+                        $user = User::find($array['customer_id']);
+
+                        if($user && ($user->phone == null || $user->phone == "") ){
+                            $user->phone = $array['phone'];
+                            $user->save();
+                        }
+
+                    }
+                }
+                DB::commit();
+                return redirect()->back()->with('success','Migration completed successfully.');
+
+            }catch(Exception $ex){
+                DB::rollBack();
+                return  $id.$ex;
+            }
+
     }
 }
